@@ -77,7 +77,7 @@ class EmailService {
             <p style="color: #854d0e; margin: 0; font-size: 14px;">⚠️ Please <strong>change your password</strong> immediately after your first login for security.</p>
           </div>
           <div style="text-align: center;">
-            <a href="http://localhost:5173/login" style="background: linear-gradient(135deg, #1e40af, #3b82f6); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px; display: inline-block;">Login to CodeGurukul →</a>
+            <a href="https://code-gurukul.vercel.app/login" style="background: linear-gradient(135deg, #1e40af, #3b82f6); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px; display: inline-block;">Login to CodeGurukul →</a>
           </div>
           <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 28px 0;">
           <p style="color: #9ca3af; font-size: 12px; text-align: center; margin: 0;">This is an automated message from CodeGurukul. Do not reply.</p>
