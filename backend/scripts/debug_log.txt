@@ -1,0 +1,38 @@
+Step 1: Script started
+Step 2: dotenv loaded
+PG_DATABASE: codegurukul
+MONGO_URI: mongodb://localhost:27017/codegurukul
+Step 3: config/db loaded
+Step 4: models loaded
+Step 5: PG connected
+Step 6: Users found: 3
+  - id=1 name=System Admin role=admin
+  - id=11 name=Nishigandha  role=teacher
+  - id=9 name=Omkar role=student
+Step 7: Profiles found: 1
+  - id=4 user_id=9 class_id=2
+Step 8: Classes found: 2
+  - id=1 name=SYBCA-E3 course_id=1
+  - id=2 name=B.Tech CS Year 1 course_id=2
+Step 9: Subjects found: 5
+  - id=1 name=Core Java type=major
+  - id=2 name=Database Technology type=minor
+  - id=3 name=Data Structures type=major
+  - id=4 name=Algorithms type=major
+  - id=5 name=Web Development type=major
+Step 10: TeacherSubjects found: 6
+  - teacher_id=11 subject_id=1 class_id=1 type=major
+  - teacher_id=11 subject_id=2 class_id=null type=minor
+  - teacher_id=11 subject_id=2 class_id=1 type=major
+  - teacher_id=11 subject_id=3 class_id=2 type=major
+  - teacher_id=11 subject_id=4 class_id=2 type=major
+  - teacher_id=11 subject_id=5 class_id=2 type=major
+Step 11: Assignments found: 6
+  - id=5 title=Core Java Assignment 1 — Classes and Objects class_id=1 status=published
+  - id=6 title=Sample Lab Core Java class_id=1 status=published
+  - id=7 title=Sample Lab Database Technology class_id=1 status=published
+  - id=8 title=Lab: Data Structures class_id=2 status=published
+  - id=9 title=Lab: Algorithms class_id=2 status=published
+  - id=10 title=Lab: Web Development class_id=2 status=published
+
+=== DEBUG COMPLETE ===

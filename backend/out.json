@@ -1,0 +1,4 @@
+{
+  "error": "Unexpected token '<', \"<!DOCTYPE \"... is not valid JSON",
+  "stack": "SyntaxError: Unexpected token '<', \"<!DOCTYPE \"... is not valid JSON\n    at JSON.parse (<anonymous>)\n    at parseJSONFromBytes (node:internal/deps/undici/undici:5738:19)\n    at successSteps (node:internal/deps/undici/undici:5719:27)\n    at fullyReadBody (node:internal/deps/undici/undici:4609:9)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async consumeBody (node:internal/deps/undici/undici:5728:7)\n    at async testApi (D:\\Code Gurukul\\backend\\scripts\\testApi.js:13:18)"
+}

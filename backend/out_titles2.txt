@@ -1,0 +1,15 @@
+Quizzes:
+Core Java Quiz — Basic Programming Concepts
+Introduction to HTML/CSS Basics
+JavaScript Fundamentals MCQ
+Database Querying and SQL
+Data Structures & Algorithms - Arrays
+Mid-Term Review Quiz
+MongoDB Advanced Concepts
+Labs:
+Core Java Assignment 1 — Classes and Objects
+Sample Lab Core Java
+Sample Lab Database Technology
+Lab: Data Structures
+Lab: Algorithms
+Lab: Web Development

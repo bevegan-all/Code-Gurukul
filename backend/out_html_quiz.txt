@@ -1,0 +1,72 @@
+{
+  "id": 2,
+  "title": "Introduction to HTML/CSS Basics",
+  "time_limit_minutes": 15,
+  "status": "published",
+  "created_at": "2026-03-07T18:34:19.812Z",
+  "teacher_id": 11,
+  "subject_id": 3,
+  "class_id": 2,
+  "QuizQuestions": [
+    {
+      "id": 3,
+      "question_text": "Which HTML tag is used for the largest heading?",
+      "question_type": "single",
+      "order_index": 1,
+      "quiz_id": 2,
+      "QuizOptions": [
+        {
+          "id": 9,
+          "option_text": "<h6>",
+          "is_correct": false,
+          "question_id": 3
+        },
+        {
+          "id": 10,
+          "option_text": "<heading>",
+          "is_correct": false,
+          "question_id": 3
+        },
+        {
+          "id": 11,
+          "option_text": "<h1>",
+          "is_correct": true,
+          "question_id": 3
+        },
+        {
+          "id": 12,
+          "option_text": "<head>",
+          "is_correct": false,
+          "question_id": 3
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "question_text": "What does CSS stand for?",
+      "question_type": "single",
+      "order_index": 2,
+      "quiz_id": 2,
+      "QuizOptions": [
+        {
+          "id": 13,
+          "option_text": "Computer Style Sheets",
+          "is_correct": false,
+          "question_id": 4
+        },
+        {
+          "id": 14,
+          "option_text": "Cascading Style Sheets",
+          "is_correct": true,
+          "question_id": 4
+        },
+        {
+          "id": 15,
+          "option_text": "Creative Style System",
+          "is_correct": false,
+          "question_id": 4
+        }
+      ]
+    }
+  ]
+}

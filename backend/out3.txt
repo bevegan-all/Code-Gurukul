@@ -1,0 +1,41 @@
+Starting script
+Loaded dotenv
+Authenticating DB...
+DB authenticated. Fetching quiz...
+Total QuizOptions in DB: 43
+Quiz fetched: Mid-Term Review Quiz
+[
+  {
+    "id": 11,
+    "question_text": "A completely balanced binary search tree has a height of:",
+    "question_type": "single",
+    "order_index": 1,
+    "quiz_id": 6,
+    "QuizOptions": [
+      {
+        "id": 40,
+        "option_text": "O(1)",
+        "is_correct": false,
+        "question_id": 11
+      },
+      {
+        "id": 41,
+        "option_text": "O(n)",
+        "is_correct": false,
+        "question_id": 11
+      },
+      {
+        "id": 42,
+        "option_text": "O(log n)",
+        "is_correct": true,
+        "question_id": 11
+      },
+      {
+        "id": 43,
+        "option_text": "O(n log n)",
+        "is_correct": false,
+        "question_id": 11
+      }
+    ]
+  }
+]

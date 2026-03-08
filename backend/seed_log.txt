@@ -1,0 +1,10 @@
+PG Connected
+Teacher found: 11
+Class found: 2
+Working with 3 subjects
+Created quiz: Introduction to HTML/CSS Basics
+Created quiz: JavaScript Fundamentals MCQ
+Created quiz: Database Querying and SQL
+Created quiz: Data Structures & Algorithms - Arrays
+Created quiz: Mid-Term Review Quiz
+Quizzes seeded successfully!

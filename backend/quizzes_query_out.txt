@@ -1,0 +1,56 @@
+[
+  {
+    "id": 6,
+    "title": "Mid-Term Review Quiz",
+    "time_limit_minutes": 45,
+    "created_at": "2026-03-07T18:34:19.847Z",
+    "subject_id": 3,
+    "subject_name": "Data Structures",
+    "teacher_name": "Nishigandha "
+  },
+  {
+    "id": 5,
+    "title": "Data Structures & Algorithms - Arrays",
+    "time_limit_minutes": 30,
+    "created_at": "2026-03-07T18:34:19.841Z",
+    "subject_id": 5,
+    "subject_name": "Web Development",
+    "teacher_name": "Nishigandha "
+  },
+  {
+    "id": 4,
+    "title": "Database Querying and SQL",
+    "time_limit_minutes": 25,
+    "created_at": "2026-03-07T18:34:19.835Z",
+    "subject_id": 4,
+    "subject_name": "Algorithms",
+    "teacher_name": "Nishigandha "
+  },
+  {
+    "id": 3,
+    "title": "JavaScript Fundamentals MCQ",
+    "time_limit_minutes": 20,
+    "created_at": "2026-03-07T18:34:19.826Z",
+    "subject_id": 3,
+    "subject_name": "Data Structures",
+    "teacher_name": "Nishigandha "
+  },
+  {
+    "id": 2,
+    "title": "Introduction to HTML/CSS Basics",
+    "time_limit_minutes": 15,
+    "created_at": "2026-03-07T18:34:19.812Z",
+    "subject_id": 3,
+    "subject_name": "Data Structures",
+    "teacher_name": "Nishigandha "
+  },
+  {
+    "id": 1,
+    "title": "Core Java Quiz — Basic Programming Concepts",
+    "time_limit_minutes": 5,
+    "created_at": "2026-03-07T14:07:38.024Z",
+    "subject_id": 1,
+    "subject_name": "Core Java",
+    "teacher_name": "Nishigandha "
+  }
+]

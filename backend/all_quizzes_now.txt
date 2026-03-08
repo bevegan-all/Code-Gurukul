@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1,
+    "title": "Core Java Quiz — Basic Programming Concepts"
+  },
+  {
+    "id": 2,
+    "title": "Introduction to HTML/CSS Basics"
+  },
+  {
+    "id": 3,
+    "title": "JavaScript Fundamentals MCQ"
+  },
+  {
+    "id": 4,
+    "title": "Database Querying and SQL"
+  },
+  {
+    "id": 5,
+    "title": "Data Structures & Algorithms - Arrays"
+  },
+  {
+    "id": 6,
+    "title": "Mid-Term Review Quiz"
+  }
+]

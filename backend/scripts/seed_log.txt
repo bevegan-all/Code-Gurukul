@@ -1,0 +1,27 @@
+=== Seed Script Started ===
+DB connected.
+Student: id=9 name=Omkar email=5454317@mitacsc.edu.in
+Course: id=2 name=Computer Science
+Class: id=2 name=B.Tech CS Year 1
+Profile already has class_id: 2
+Teacher: id=11 name=Nishigandha 
+Subject: id=3 name=Data Structures type=major
+Subject: id=4 name=Algorithms type=major
+Subject: id=5 name=Web Development type=major
+TeacherSubject linked: teacher 11 -> subject Data Structures -> class 2
+TeacherSubject linked: teacher 11 -> subject Algorithms -> class 2
+TeacherSubject linked: teacher 11 -> subject Web Development -> class 2
+Assignment created for: Data Structures
+Assignment created for: Algorithms
+Assignment created for: Web Development
+Note already exists for: Data Structures
+Note already exists for: Algorithms
+Note already exists for: Web Development
+
+=== Verification ===
+TeacherSubjects for class 2: 3
+Published assignments for class 2: 3
+Published notes for class 2: 3
+Dashboard subject count: 3
+
+=== SEED COMPLETE ===
