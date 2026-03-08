@@ -22,11 +22,14 @@ const Monitor = () => {
   }, [selectedStudent]);
 
   useEffect(() => {
-    const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+    // Derive socket URL from API URL (strip /api suffix) so it works via ngrok too
+    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const SOCKET_URL = apiBase.replace(/\/api$/, '');
     const socket = io(SOCKET_URL, {
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 1000,
+      extraHeaders: { 'ngrok-skip-browser-warning': 'true' },
     });
     socketRef.current = socket;
 
