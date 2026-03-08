@@ -1,8 +1,11 @@
 import axios from 'axios';
 
-// Create an instance, in dev it hits localhost:5000, in prod it hits relative path
+// Create an instance, in dev it hits localhost:5000, in prod it hits ngrok URL
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  headers: {
+    'ngrok-skip-browser-warning': 'true',  // bypass ngrok browser warning page
+  },
 });
 
 // Intercept requests to inject the access token
