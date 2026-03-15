@@ -25,34 +25,43 @@ export default function NoteDetail() {
       <div className="p-8 max-w-4xl mx-auto w-full flex-1 overflow-y-auto">
         <button 
           onClick={() => navigate(-1)}
+          aria-label="Go back to notes list"
           className="mb-8 flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-emerald-600 transition-colors"
         >
-          <ArrowLeft size={16} /> Go Back
+          <ArrowLeft size={16} aria-hidden="true" /> Go Back
         </button>
 
         {loading ? (
-          <div className="flex justify-center p-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
+          <div className="flex justify-center p-12" role="status" aria-label="Loading note content">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500" aria-hidden="true"></div>
+            <span className="sr-only">Loading note…</span>
           </div>
         ) : !note ? (
-          <div className="text-center text-slate-500">Note not found.</div>
+          <div role="alert" className="text-center text-slate-500">Note not found.</div>
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-md p-10 animate-in fade-in duration-300">
+          <article
+            className="bg-white rounded-2xl border border-slate-200 shadow-md p-10 animate-in fade-in duration-300"
+            aria-label={`Study note: ${note.title}`}
+          >
              <div className="border-b border-slate-100 pb-8 mb-8 text-center">
-                <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm border border-emerald-100">
-                   <NotebookPen size={32} />
+                <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm border border-emerald-100" aria-hidden="true">
+                   <NotebookPen size={32} aria-hidden="true" />
                 </div>
                 <h1 className="text-3xl font-black text-slate-800 mb-2">{note.title}</h1>
                 <div className="flex items-center justify-center gap-4 text-sm font-semibold text-slate-400 mt-4">
-                   <span className="flex items-center gap-1.5 bg-slate-50 px-3 py-1 rounded-full"><FileText size={14} /> Subject: {note.subject_name}</span>
-                   <span className="flex items-center gap-1.5 bg-slate-50 px-3 py-1 rounded-full"><Calendar size={14} /> {new Date(note.created_at).toLocaleDateString()}</span>
+                   <span className="flex items-center gap-1.5 bg-slate-50 px-3 py-1 rounded-full">
+                     <FileText size={14} aria-hidden="true" /> Subject: {note.subject_name}
+                   </span>
+                   <span className="flex items-center gap-1.5 bg-slate-50 px-3 py-1 rounded-full">
+                     <Calendar size={14} aria-hidden="true" /> {new Date(note.created_at).toLocaleDateString()}
+                   </span>
                 </div>
              </div>
 
              <div className="prose prose-slate max-w-none text-slate-700 leading-loose prose-h1:text-slate-800 prose-h2:text-slate-800 prose-h3:text-slate-800 prose-a:text-indigo-600 hover:prose-a:text-indigo-500 prose-img:rounded-xl">
                <div dangerouslySetInnerHTML={{ __html: note.content_html }} />
              </div>
-          </div>
+          </article>
         )}
       </div>
     </div>

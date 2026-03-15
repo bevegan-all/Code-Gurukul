@@ -20,6 +20,8 @@ module.exports = (io) => {
       const sid = String(data.studentId);
       console.log(`student:online received from ${sid} (socket: ${socket.id}) for class ${data.classId}`);
       if (data.classId) {
+        // Tag socket for automatic offline on disconnect
+        socket.studentInfo = data;
         socket.join(`class_${data.classId}`);
         socket.join(`student_${sid}`);
         studentSocketMap.set(sid, socket.id);
@@ -27,8 +29,8 @@ module.exports = (io) => {
           studentId: data.studentId,
           studentName: data.studentName,
           rollNo: data.rollNo,
-          activity: 'Active',
-          action: 'Online',
+          activity: data.activity || 'Active',
+          action: data.action || 'Online',
           classId: data.classId
         });
       }
@@ -38,14 +40,23 @@ module.exports = (io) => {
       const sid = String(data.studentId);
       studentSocketMap.set(sid, socket.id);
       if (data.classId) {
+        socket.studentInfo = data; // Keep info updated
         io.to(`teacher_${data.classId}`).emit('student:activity', {
           studentId: data.studentId,
           studentName: data.studentName,
           rollNo: data.rollNo,
-          activity: 'Active',
-          action: 'Browser Open',
+          activity: data.activity || 'Active',
+          action: data.action || 'Browser Open',
           classId: data.classId
         });
+      }
+    });
+
+    socket.on('student:activity', (data) => {
+      const sid = String(data.studentId);
+      studentSocketMap.set(sid, socket.id);
+      if (data.classId) {
+        io.to(`teacher_${data.classId}`).emit('student:activity', data);
       }
     });
 
@@ -71,6 +82,20 @@ module.exports = (io) => {
 
     socket.on('disconnect', () => {
       console.log(`Client disconnected: ${socket.id}`);
+      
+      if (socket.studentInfo) {
+        const { studentId, studentName, rollNo, classId } = socket.studentInfo;
+        console.log(`Notifying teacher room teacher_${classId} that student ${studentId} is Offline`);
+        io.to(`teacher_${classId}`).emit('student:activity', {
+          studentId,
+          studentName,
+          rollNo,
+          classId,
+          activity: 'Offline',
+          action: 'App Closed'
+        });
+      }
+
       // Clean up from studentSocketMap if this was the latest socket for a student
       for (const [studentId, mappedSocketId] of studentSocketMap.entries()) {
         if (mappedSocketId === socket.id) {

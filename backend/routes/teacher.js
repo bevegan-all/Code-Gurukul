@@ -2,61 +2,51 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const requireRole = require('../middleware/roleGuard');
-const { sequelize, Subject, Class, User, LabAssignment, AssignmentSet, AssignmentQuestion, Quiz, QuizQuestion, QuizOption, TeacherSubject } = require('../models/postgres');
-const { Note, IdleAlert } = require('../models/mongo');
+const { sequelize, Subject, Class, User, LabAssignment, AssignmentSet, AssignmentQuestion, Quiz, QuizQuestion, QuizOption, TeacherSubject, Lab, LabSlot, MinorLab, MinorLabSlot, StudentProfile } = require('../models/postgres');
+const { Note, IdleAlert, StudentSession, StudentReport } = require('../models/mongo');
+const { sendStudentReport } = require('../services/reportService');
+const emailService = require('../services/emailService');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// Ensure upload directory exists
+const uploadDir = path.join(__dirname, '..', 'public', 'uploads', 'labbooks');
+if (!fs.existsSync(uploadDir)) { fs.mkdirSync(uploadDir, { recursive: true }); }
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) { cb(null, uploadDir); },
+  filename: function (req, file, cb) { cb(null, 'labbook-' + Date.now() + path.extname(file.originalname)); }
+});
+const upload = multer({ storage: storage });
 
 router.use(auth, requireRole('teacher'));
 
 // @route   GET /api/teacher/dashboard-stats
-// @desc    Get dashboard statistics specific to the logged-in teacher
 router.get('/dashboard-stats', async (req, res) => {
   try {
     const teacherId = req.user.id;
+    const countSubjects = await TeacherSubject.count({ distinct: true, col: 'subject_id', where: { teacher_id: teacherId } });
+    const countClasses = await TeacherSubject.count({ distinct: true, col: 'class_id', where: { teacher_id: teacherId, type: 'major' } });
 
-    // Count distinct subjects assigned
-    const countSubjects = await TeacherSubject.count({
-      distinct: true,
-      col: 'subject_id',
-      where: { teacher_id: teacherId }
-    });
-
-    // Count distinct classes assigned (where type is major, because minor doesn't have class usually)
-    const countClasses = await TeacherSubject.count({
-      distinct: true,
-      col: 'class_id',
-      where: { teacher_id: teacherId, type: 'major' }
-    });
-
-    // Get assigned students through classes securely using raw query
     const result = await sequelize.query(`
       SELECT COUNT(DISTINCT sp.id) as students
       FROM "TeacherSubjects" ts
       JOIN "Classes" c ON ts.class_id = c.id
       JOIN "StudentProfiles" sp ON c.id = sp.class_id
       WHERE ts.teacher_id = :teacherId
-    `, {
-      replacements: { teacherId },
-      type: sequelize.QueryTypes.SELECT
-    });
+    `, { replacements: { teacherId }, type: sequelize.QueryTypes.SELECT });
     const studentsCount = result.length > 0 ? result[0].students : 0;
 
-    // Get Active lab assignments created by teacher
-    const countAssignments = await LabAssignment.count({
-      where: { teacher_id: teacherId, status: 'published' }
-    });
+    const countAssignments = await LabAssignment.count({ where: { teacher_id: teacherId, status: 'published' } });
 
-    // Get recent activity/classes for chart or list
     const RawAssignments = await sequelize.query(`
-      SELECT ts.id, ts.type, s.name as subject_name, c.name as class_name
+      SELECT ts.id, ts.type, ts.subject_id, ts.class_id, s.name as subject_name, c.name as class_name
       FROM "TeacherSubjects" ts
       LEFT JOIN "Subjects" s ON ts.subject_id = s.id
       LEFT JOIN "Classes" c ON ts.class_id = c.id
       WHERE ts.teacher_id = :teacherId
-      LIMIT 5
-    `, {
-      replacements: { teacherId },
-      type: sequelize.QueryTypes.SELECT
-    });
+    `, { replacements: { teacherId }, type: sequelize.QueryTypes.SELECT });
 
     res.json({
       subjects: countSubjects,
@@ -65,34 +55,229 @@ router.get('/dashboard-stats', async (req, res) => {
       activeAssignments: countAssignments,
       myClasses: RawAssignments.map(a => ({
         id: a.id,
+        subject_id: a.subject_id,
+        class_id: a.class_id,
         Subject: { name: a.subject_name || "Unknown", type: a.type },
-        Class: { name: a.class_name || "N/A" }
+        Class: { name: a.class_name || "Unknown" }
       }))
     });
   } catch (err) {
-    console.error('GET /teacher/dashboard-stats error:', err.message);
     res.status(500).json({ error: 'Server error fetching teacher stats' });
   }
 });
 
 // ============================================================
-// GET /api/teacher/my-subjects   — subjects assigned to teacher
+// TIMETABLE & CURRENT LAB
+// ============================================================
+router.get('/my-timetable', async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+    const majorSlots = await sequelize.query(`
+      SELECT ls.day, ls.start_time, ls.end_time, 'major' as slot_type,
+             l.name as lab_name, l.roll_from, l.roll_to, l.id as lab_id,
+             c.name as class_name, c.id as class_id, 'Major Lab' as subject_name
+      FROM "LabSlots" ls
+      JOIN "Labs" l ON ls.lab_id = l.id
+      JOIN "Classes" c ON l.class_id = c.id
+      WHERE ls.teacher_id = :teacherId
+    `, { replacements: { teacherId }, type: sequelize.QueryTypes.SELECT });
+
+    const minorSlots = await sequelize.query(`
+      SELECT mls.day, mls.start_time, mls.end_time, 'minor' as slot_type,
+             ml.name as lab_name, ml.id as lab_id,
+             s.name as subject_name, s.id as subject_id
+      FROM "MinorLabSlots" mls
+      JOIN "MinorLabs" ml ON mls.minor_lab_id = ml.id
+      JOIN "Subjects" s ON ml.subject_id = s.id
+      WHERE mls.teacher_id = :teacherId
+    `, { replacements: { teacherId }, type: sequelize.QueryTypes.SELECT });
+
+    res.json([...majorSlots, ...minorSlots]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/current-lab', async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const today = days[new Date().getDay()];
+    // HH:MM:SS format based on local time or UTC config. Assuming normal date formatting
+    const nowHours = new Date().getHours().toString().padStart(2, '0');
+    const nowMinutes = new Date().getMinutes().toString().padStart(2, '0');
+    const currentTime = `${nowHours}:${nowMinutes}:00`;
+
+    let slots = await sequelize.query(`
+      SELECT ls.id, ls.start_time, ls.end_time, l.id as lab_id, l.name as lab_name, c.name as class_name, c.id as class_id, 
+             s.name as subject_name, s.id as subject_id, ls.is_unrestricted, 'major' as type
+      FROM "LabSlots" ls
+      JOIN "Labs" l ON ls.lab_id = l.id
+      JOIN "Classes" c ON l.class_id = c.id
+      LEFT JOIN "Subjects" s ON ls.subject_id = s.id
+      WHERE ls.teacher_id = :teacherId AND ls.day = :today 
+        AND ls.start_time <= :currentTime AND ls.end_time >= :currentTime
+    `, { replacements: { teacherId, today, currentTime }, type: sequelize.QueryTypes.SELECT });
+
+    if (slots.length > 0) return res.json(slots[0]);
+
+    slots = await sequelize.query(`
+      SELECT mls.id, mls.start_time, mls.end_time, ml.id as lab_id, ml.name as lab_name, s.name as subject_name, s.id as subject_id, mls.is_unrestricted, 'minor' as type
+      FROM "MinorLabSlots" mls
+      JOIN "MinorLabs" ml ON mls.minor_lab_id = ml.id
+      JOIN "Subjects" s ON ml.subject_id = s.id
+      WHERE mls.teacher_id = :teacherId AND mls.day = :today 
+        AND mls.start_time <= :currentTime AND mls.end_time >= :currentTime
+    `, { replacements: { teacherId, today, currentTime }, type: sequelize.QueryTypes.SELECT });
+
+    if (slots.length > 0) return res.json(slots[0]);
+
+    res.json(null);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// @route   POST /api/teacher/toggle-restriction
+router.post('/toggle-restriction', async (req, res) => {
+  try {
+    const { slotId, type, isUnrestricted } = req.body;
+    if (!slotId || !type) return res.status(400).json({ error: 'Missing slotId or type' });
+
+    let classId = null;
+
+    if (type === 'major') {
+      await LabSlot.update({ is_unrestricted: isUnrestricted }, { where: { id: slotId } });
+
+      // LabSlot → Lab → class_id
+      const [row] = await sequelize.query(
+        `SELECT l.class_id FROM "LabSlots" ls JOIN "Labs" l ON ls.lab_id = l.id WHERE ls.id = :slotId LIMIT 1`,
+        { replacements: { slotId }, type: sequelize.QueryTypes.SELECT }
+      );
+      classId = row?.class_id ?? null;
+
+    } else {
+      await MinorLabSlot.update({ is_unrestricted: isUnrestricted }, { where: { id: slotId } });
+
+      // MinorLabSlot → MinorLab → StudentProfiles → class_id (pick first enrolled student's class)
+      const [row] = await sequelize.query(
+        `SELECT sp.class_id
+         FROM "MinorLabSlots" mls
+         JOIN "MinorLabs" ml ON mls.minor_lab_id = ml.id
+         JOIN "StudentProfiles" sp ON sp.minor_lab_id = ml.id
+         WHERE mls.id = :slotId
+         LIMIT 1`,
+        { replacements: { slotId }, type: sequelize.QueryTypes.SELECT }
+      );
+      classId = row?.class_id ?? null;
+    }
+
+    // Emit ONLY to the specific class room — not globally
+    const io = req.app.get('socketio');
+    if (io && classId) {
+      console.log(`[Restriction] Emitting lab:restriction_status to class_${classId} (isUnrestricted=${isUnrestricted})`);
+      io.to(`class_${classId}`).emit('lab:restriction_status', { slotId, isUnrestricted });
+    } else if (io && !classId) {
+      // Fallback: classId lookup failed, log a warning but do NOT emit globally
+      console.warn(`[Restriction] Could not resolve classId for slotId=${slotId} type=${type}. Restriction not broadcast.`);
+    }
+
+    res.json({ success: true, isUnrestricted });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+
+// ============================================================
+// GET /api/teacher/my-subjects — subjects from direct assignment OR lab slot assignment
 // ============================================================
 router.get('/my-subjects', async (req, res) => {
   try {
+    const tid = req.user.id;
+    // UNION of: 
+    // 1. Direct assignments (TeacherSubjects)
+    // 2. Lab Slot assignments (LabSlots -> Labs -> Classes -> Subjects)
+    // 3. Minor Lab Slot assignments (MinorLabSlots -> MinorLabs -> Subjects)
     const rows = await sequelize.query(`
-      SELECT ts.id, ts.type, s.id as subject_id, s.name as subject_name, c.id as class_id, c.name as class_name
-      FROM "TeacherSubjects" ts
-      LEFT JOIN "Subjects" s ON ts.subject_id = s.id
-      LEFT JOIN "Classes" c ON ts.class_id = c.id
-      WHERE ts.teacher_id = :tid
-      ORDER BY ts.type, s.name
-    `, { replacements: { tid: req.user.id }, type: sequelize.QueryTypes.SELECT });
+      SELECT DISTINCT s.id as subject_id, s.name as subject_name, s.type, c.id as class_id, c.name as class_name
+      FROM "Subjects" s
+      LEFT JOIN "Classes" c ON s.course_id = c.course_id AND s.year::text = c.year::text
+      WHERE s.id IN (
+        SELECT subject_id FROM "TeacherSubjects" WHERE teacher_id = :tid
+        UNION
+        SELECT subject_id FROM "LabSlots" WHERE teacher_id = :tid AND subject_id IS NOT NULL
+        UNION
+        SELECT ml.subject_id FROM "MinorLabSlots" mls JOIN "MinorLabs" ml ON mls.minor_lab_id = ml.id WHERE mls.teacher_id = :tid
+      )
+      -- Ensure we only match the classes the teacher is actually assigned to
+      AND (
+        -- If it's a direct assignment, match the specific class
+        EXISTS (SELECT 1 FROM "TeacherSubjects" ts WHERE ts.teacher_id = :tid AND ts.subject_id = s.id AND (ts.class_id = c.id OR ts.class_id IS NULL))
+        OR
+        -- If it's a lab assignment, match the class of that lab
+        EXISTS (SELECT 1 FROM "LabSlots" ls JOIN "Labs" l ON ls.lab_id = l.id WHERE ls.teacher_id = :tid AND ls.subject_id = s.id AND l.class_id = c.id)
+        OR
+        -- For minor subjects, they are usually linked to multiple classes, but if we have a class match in the join above, we show it
+        s.type = 'minor'
+      )
+      ORDER BY s.type, s.name
+    `, { replacements: { tid }, type: sequelize.QueryTypes.SELECT });
+    
+    // De-duplicate: A teacher might be a subject teacher AND a lab teacher for the same subject/class.
+    // The query above with DISTINCT and s.id / c.id should handle most cases.
     res.json(rows);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: err.message });
   }
+});
+
+router.get('/subject/:id/faculties', async (req, res) => {
+  try {
+    const { id: subjectId } = req.params;
+    const { class_id } = req.query;
+
+    // 1. Get Subject Teacher
+    const subTeacher = await sequelize.query(`
+      SELECT u.name FROM "TeacherSubjects" ts 
+      JOIN "Users" u ON ts.teacher_id = u.id
+      WHERE ts.subject_id = :sid AND (ts.class_id = :cid OR ts.class_id IS NULL) AND ts.type = 'major'
+      LIMIT 1
+    `, { replacements: { sid: subjectId, cid: class_id || null }, type: sequelize.QueryTypes.SELECT });
+
+    // 2. Get Lab Teachers (Major)
+    const labTeachers = await sequelize.query(`
+      SELECT u.name as teacher_name, l.name as lab_name, ls.day 
+      FROM "LabSlots" ls
+      JOIN "Labs" l ON ls.lab_id = l.id
+      JOIN "Users" u ON ls.teacher_id = u.id
+      WHERE ls.subject_id = :sid AND l.class_id = :cid
+    `, { replacements: { sid: subjectId, cid: class_id || null }, type: sequelize.QueryTypes.SELECT });
+
+    // 3. Get Minor Lab Teachers (Minor)
+    const minorTeachers = await sequelize.query(`
+      SELECT u.name as teacher_name, ml.name as lab_name, mls.day
+      FROM "MinorLabSlots" mls
+      JOIN "MinorLabs" ml ON mls.minor_lab_id = ml.id
+      JOIN "Users" u ON mls.teacher_id = u.id
+      WHERE ml.subject_id = :sid
+    `, { replacements: { sid: subjectId }, type: sequelize.QueryTypes.SELECT });
+
+    res.json({
+      subjectTeacher: subTeacher[0]?.name || 'Not assigned',
+      labs: [...labTeachers, ...minorTeachers]
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/teacher/labs/:classId
+router.get('/labs/:classId', async (req, res) => {
+  try {
+    const labs = await Lab.findAll({ where: { class_id: req.params.classId } });
+    res.json(labs);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/teacher/minor-labs/:subjectId
+router.get('/minor-labs/:subjectId', async (req, res) => {
+  try {
+    const labs = await MinorLab.findAll({ where: { subject_id: req.params.subjectId } });
+    res.json(labs);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ============================================================
@@ -100,70 +285,91 @@ router.get('/my-subjects', async (req, res) => {
 // ============================================================
 router.get('/my-students', async (req, res) => {
   try {
+    const tid = req.user.id;
     const rows = await sequelize.query(`
       SELECT DISTINCT u.id, u.name, u.email, u.is_active,
              sp.roll_no, sc.id as class_id, sc.name as class_name, co.name as course_name,
              ms.name as minor_subject_name
-      FROM "TeacherSubjects" ts
-      INNER JOIN "StudentProfiles" sp ON (
-        (ts.type = 'major' AND ts.class_id = sp.class_id)
-        OR
-        (ts.type = 'minor' AND sp.minor_subject_id = ts.subject_id)
-      )
+      FROM "StudentProfiles" sp
       INNER JOIN "Users" u ON u.id = sp.user_id
       LEFT JOIN "Classes" sc ON sp.class_id = sc.id
       LEFT JOIN "Courses" co ON sc.course_id = co.id
       LEFT JOIN "Subjects" ms ON sp.minor_subject_id = ms.id
-      WHERE ts.teacher_id = :tid
+      WHERE (
+        -- Major or VSC students (by class)
+        sp.class_id IN (
+          SELECT class_id FROM "TeacherSubjects" WHERE teacher_id = :tid AND (type = 'major' OR type = 'vsc')
+          UNION
+          SELECT l.class_id FROM "LabSlots" ls JOIN "Labs" l ON ls.lab_id = l.id WHERE ls.teacher_id = :tid
+        )
+        OR
+        -- Minor students (by subject)
+        sp.minor_subject_id IN (
+          SELECT subject_id FROM "TeacherSubjects" WHERE teacher_id = :tid AND type = 'minor'
+          UNION
+          SELECT ml.subject_id FROM "MinorLabSlots" mls JOIN "MinorLabs" ml ON mls.minor_lab_id = ml.id WHERE mls.teacher_id = :tid
+        )
+      )
       ORDER BY sc.name, u.name
-    `, { replacements: { tid: req.user.id }, type: sequelize.QueryTypes.SELECT });
+    `, { replacements: { tid }, type: sequelize.QueryTypes.SELECT });
     res.json(rows);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // GET /api/teacher/my-students-by-subject/:subjectId
-// Returns students for a specific subject (major → by class, minor → by minor_subject_id)
 router.get('/my-students-by-subject/:subjectId', async (req, res) => {
   try {
     const { subjectId } = req.params;
-    // First find what type this subject is for this teacher
-    const [tsRow] = await sequelize.query(`
-      SELECT ts.type, ts.class_id FROM "TeacherSubjects" ts
-      WHERE ts.teacher_id = :tid AND ts.subject_id = :sid
-      LIMIT 1
-    `, { replacements: { tid: req.user.id, sid: subjectId }, type: sequelize.QueryTypes.SELECT });
+    const { lab_id } = req.query;
+    const tid = req.user.id;
 
-    if (!tsRow) return res.json([]);
+    // Determine type and access
+    const sub = await Subject.findByPk(subjectId);
+    if (!sub) return res.status(404).json({ error: 'Subject not found' });
 
     let rows;
-    if (tsRow.type === 'major') {
-      rows = await sequelize.query(`
+    if (sub.type === 'major' || sub.type === 'vsc') {
+      // Find classes for this subject where teacher has access (Direct or Lab Slot)
+      const classes = await sequelize.query(`
+        SELECT class_id FROM "TeacherSubjects" WHERE teacher_id = :tid AND subject_id = :sid
+        UNION
+        SELECT l.class_id FROM "LabSlots" ls JOIN "Labs" l ON ls.lab_id = l.id WHERE ls.teacher_id = :tid AND ls.subject_id = :sid
+      `, { replacements: { tid, sid: subjectId }, type: sequelize.QueryTypes.SELECT });
+      
+      if (classes.length === 0) return res.json([]);
+      const classIds = classes.map(c => c.class_id);
+
+      let q = `
         SELECT u.id, u.name, u.email, u.is_active,
-               sp.roll_no, c.id as class_id, c.name as class_name
+               sp.roll_no, c.id as class_id, c.name as class_name, sp.lab_id
         FROM "StudentProfiles" sp
         JOIN "Users" u ON u.id = sp.user_id
         JOIN "Classes" c ON c.id = sp.class_id
-        WHERE sp.class_id = :cid AND u.role = 'student'
-        ORDER BY u.name
-      `, { replacements: { cid: tsRow.class_id }, type: sequelize.QueryTypes.SELECT });
+        WHERE sp.class_id IN (:cids) AND u.role = 'student'
+      `;
+      const replacements = { cids: classIds };
+      if (lab_id) { q += " AND sp.lab_id = :lid"; replacements.lid = lab_id; }
+      q += " ORDER BY u.name";
+      rows = await sequelize.query(q, { replacements, type: sequelize.QueryTypes.SELECT });
     } else {
-      // minor — students who have this subject as their minor_subject_id
-      rows = await sequelize.query(`
+      // Minor
+      let q = `
         SELECT u.id, u.name, u.email, u.is_active,
-               sp.roll_no, c.id as class_id, c.name as class_name
+               sp.roll_no, c.id as class_id, c.name as class_name, sp.minor_lab_id
         FROM "StudentProfiles" sp
         JOIN "Users" u ON u.id = sp.user_id
         JOIN "Classes" c ON c.id = sp.class_id
         WHERE sp.minor_subject_id = :sid AND u.role = 'student'
-        ORDER BY u.name
-      `, { replacements: { sid: subjectId }, type: sequelize.QueryTypes.SELECT });
+      `;
+      const replacements = { sid: subjectId };
+      if (lab_id) { q += " AND sp.minor_lab_id = :lid"; replacements.lid = lab_id; }
+      q += " ORDER BY u.name";
+      rows = await sequelize.query(q, { replacements, type: sequelize.QueryTypes.SELECT });
     }
     res.json(rows);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -174,18 +380,40 @@ router.get('/my-students-by-subject/:subjectId', async (req, res) => {
 // ============================================================
 router.get('/assignments', async (req, res) => {
   try {
-    const rows = await sequelize.query(`
-      SELECT la.id, la.title, la.description, la.compiler_required, la.time_limit_minutes, la.status, la.created_at,
-             la.subject_id, la.class_id, s.name as subject_name, c.name as class_name
-      FROM "LabAssignments" la
-      LEFT JOIN "Subjects" s ON la.subject_id = s.id
-      LEFT JOIN "Classes" c ON la.class_id = c.id
-      WHERE la.teacher_id = :tid
-      ORDER BY la.created_at DESC
-    `, { replacements: { tid: req.user.id }, type: sequelize.QueryTypes.SELECT });
+    const tid = req.user.id;
+    // Using Sequelize models for better reliability
+    const assignments = await LabAssignment.findAll({
+      include: [
+        { model: Subject, attributes: ['name'] },
+        { model: Class, attributes: ['name'] }
+      ],
+      order: [['created_at', 'DESC']]
+    });
+
+    // Determine subjects teacher has access to
+    const accessSubjects = await sequelize.query(`
+      SELECT subject_id FROM "TeacherSubjects" WHERE teacher_id = :tid
+      UNION
+      SELECT subject_id FROM "LabSlots" WHERE teacher_id = :tid AND subject_id IS NOT NULL
+      UNION
+      SELECT ml.subject_id FROM "MinorLabSlots" mls JOIN "MinorLabs" ml ON mls.minor_lab_id = ml.id WHERE mls.teacher_id = :tid
+    `, { replacements: { tid }, type: sequelize.QueryTypes.SELECT });
+    const subjectIds = accessSubjects.map(s => s.subject_id);
+
+    const rows = assignments.filter(a => 
+      a.teacher_id === tid || subjectIds.includes(a.subject_id)
+    ).map(a => {
+      const plain = a.get({ plain: true });
+      return {
+        ...plain,
+        subject_name: plain.Subject?.name,
+        class_name: plain.Class?.name
+      };
+    });
+
+    console.log(`[Teacher Debug] Assignments fetched (model): ${rows.length} for TID ${tid}`);
     res.json(rows);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -193,40 +421,108 @@ router.get('/assignments', async (req, res) => {
 // @route   POST /api/teacher/assignments
 router.post('/assignments', async (req, res) => {
   try {
-    const { subject_id, class_id, title, description, compiler_required, time_limit_minutes, status, sets } = req.body;
+    const { subject_id, class_id, title, description, compiler_required, time_limit_minutes, status, sets, target_labs } = req.body;
     const assignment = await LabAssignment.create({
       teacher_id: req.user.id, subject_id, class_id: class_id || null, title, description,
-      compiler_required, time_limit_minutes: time_limit_minutes || null, status: status || 'draft'
+      compiler_required, time_limit_minutes: time_limit_minutes || null, status: status || 'draft',
+      target_labs: target_labs || null
     });
     if (sets && Array.isArray(sets)) {
       for (const set of sets) {
         const newSet = await AssignmentSet.create({ assignment_id: assignment.id, set_name: set.name });
         if (set.questions && Array.isArray(set.questions)) {
           await AssignmentQuestion.bulkCreate(set.questions.map((q, idx) => ({
-            set_id: newSet.id, question_text: q.question_text, expected_code: q.expected_code, order_index: idx + 1
+            set_id: newSet.id, 
+            question_text: q.question_text, 
+            expected_code: q.expected_code, 
+            order_index: idx + 1,
+            expected_output: q.expected_output || null,
+            max_marks: q.max_marks || 10
           })));
         }
       }
     }
     res.json({ msg: 'Assignment created successfully', assignmentId: assignment.id });
   } catch (err) {
-    console.error('Assignment Creation Error:', err);
     res.status(500).json({ error: err.message || 'Server error' });
   }
 });
 
-// PUT /api/teacher/assignments/:id — update status (draft/published)
-router.put('/assignments/:id', async (req, res) => {
+router.get('/assignments/:id', async (req, res) => {
   try {
-    await LabAssignment.update({ status: req.body.status }, { where: { id: req.params.id, teacher_id: req.user.id } });
-    res.json({ msg: 'Assignment updated' });
+    const assignment = await LabAssignment.findByPk(req.params.id, {
+      include: [{ 
+        model: AssignmentSet, 
+        include: [{ model: AssignmentQuestion, order: [['order_index', 'ASC']] }] 
+      }]
+    });
+    res.json(assignment);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// DELETE /api/teacher/assignments/:id
+router.put('/assignments/:id', async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const { title, description, compiler_required, time_limit_minutes, status, target_labs, sets } = req.body;
+
+    await LabAssignment.update({ 
+      title, description, compiler_required, time_limit_minutes, status, target_labs 
+    }, { where: { id }, transaction: t });
+
+    if (sets && Array.isArray(sets)) {
+      for (const set of sets) {
+        let setId = set.id;
+        if (setId) {
+          await AssignmentSet.update({ set_name: set.name }, { where: { id: setId }, transaction: t });
+        } else {
+          const newSet = await AssignmentSet.create({ assignment_id: id, set_name: set.name }, { transaction: t });
+          setId = newSet.id;
+        }
+
+        if (set.questions && Array.isArray(set.questions)) {
+          // Identify existing question IDs to catch deletions
+          const existingQs = await AssignmentQuestion.findAll({ where: { set_id: setId }, transaction: t });
+          const existingQIds = existingQs.map(q => q.id);
+          const incomingQIds = set.questions.map(q => q.id).filter(id => !!id);
+
+          // Delete questions not in incoming list
+          const toDelete = existingQIds.filter(id => !incomingQIds.includes(id));
+          if (toDelete.length > 0) {
+            await AssignmentQuestion.destroy({ where: { id: toDelete }, transaction: t });
+          }
+
+          // Update or Create
+          for (let i = 0; i < set.questions.length; i++) {
+            const q = set.questions[i];
+            const qData = {
+              question_text: q.question_text,
+              expected_code: q.expected_code,
+              order_index: i + 1,
+              expected_output: q.expected_output || null,
+              max_marks: q.max_marks || 10
+            };
+            if (q.id) {
+              await AssignmentQuestion.update(qData, { where: { id: q.id }, transaction: t });
+            } else {
+              await AssignmentQuestion.create({ ...qData, set_id: setId }, { transaction: t });
+            }
+          }
+        }
+      }
+    }
+
+    await t.commit();
+    res.json({ msg: 'Assignment updated successfully' });
+  } catch (err) {
+    await t.rollback();
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.delete('/assignments/:id', async (req, res) => {
   try {
-    await LabAssignment.destroy({ where: { id: req.params.id, teacher_id: req.user.id } });
+    await LabAssignment.destroy({ where: { id: req.params.id } });
     res.json({ msg: 'Assignment deleted' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -236,21 +532,40 @@ router.delete('/assignments/:id', async (req, res) => {
 // ============================================================
 router.get('/quizzes', async (req, res) => {
   try {
-    const rows = await sequelize.query(`
-      SELECT q.id, q.title, q.time_limit_minutes, q.status, q.created_at,
-             q.subject_id, q.class_id, s.name as subject_name, c.name as class_name,
-             COUNT(qq.id) as questions_count
-      FROM "Quizzes" q
-      LEFT JOIN "Subjects" s ON q.subject_id = s.id
-      LEFT JOIN "Classes" c ON q.class_id = c.id
-      LEFT JOIN "QuizQuestions" qq ON qq.quiz_id = q.id
-      WHERE q.teacher_id = :tid
-      GROUP BY q.id, s.name, c.name
-      ORDER BY q.created_at DESC
-    `, { replacements: { tid: req.user.id }, type: sequelize.QueryTypes.SELECT });
+    const tid = req.user.id;
+    const quizzes = await Quiz.findAll({
+      include: [
+        { model: Subject, attributes: ['name'] },
+        { model: Class, attributes: ['name'] },
+        { model: QuizQuestion, attributes: ['id'] }
+      ],
+      order: [['created_at', 'DESC']]
+    });
+
+    const accessSubjects = await sequelize.query(`
+      SELECT subject_id FROM "TeacherSubjects" WHERE teacher_id = :tid
+      UNION
+      SELECT subject_id FROM "LabSlots" WHERE teacher_id = :tid AND subject_id IS NOT NULL
+      UNION
+      SELECT ml.subject_id FROM "MinorLabSlots" mls JOIN "MinorLabs" ml ON mls.minor_lab_id = ml.id WHERE mls.teacher_id = :tid
+    `, { replacements: { tid }, type: sequelize.QueryTypes.SELECT });
+    const subjectIds = accessSubjects.map(s => s.subject_id);
+
+    const rows = quizzes.filter(q => 
+      q.teacher_id === tid || subjectIds.includes(q.subject_id)
+    ).map(q => {
+      const plain = q.get({ plain: true });
+      return {
+        ...plain,
+        subject_name: plain.Subject?.name,
+        class_name: plain.Class?.name,
+        questions_count: plain.QuizQuestions?.length || 0
+      };
+    });
+
+    console.log(`[Teacher Debug] Quizzes fetched (model): ${rows.length} for TID ${tid}`);
     res.json(rows);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -258,10 +573,11 @@ router.get('/quizzes', async (req, res) => {
 // @route   POST /api/teacher/quizzes
 router.post('/quizzes', async (req, res) => {
   try {
-    const { subject_id, class_id, title, time_limit_minutes, status, questions } = req.body;
+    const { subject_id, class_id, title, time_limit_minutes, status, questions, target_labs } = req.body;
     const quiz = await Quiz.create({
       teacher_id: req.user.id, subject_id, class_id: class_id || null, title,
-      time_limit_minutes: time_limit_minutes || null, status: status || 'draft'
+      time_limit_minutes: time_limit_minutes || null, status: status || 'draft',
+      target_labs: target_labs || null, total_marks: (questions?.length || 0)
     });
     if (questions && Array.isArray(questions)) {
       for (let idx = 0; idx < questions.length; idx++) {
@@ -274,23 +590,94 @@ router.post('/quizzes', async (req, res) => {
     }
     res.json({ msg: 'Quiz created successfully', quizId: quiz.id });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// PUT /api/teacher/quizzes/:id
-router.put('/quizzes/:id', async (req, res) => {
+router.get('/quizzes/:id', async (req, res) => {
   try {
-    await Quiz.update({ status: req.body.status }, { where: { id: req.params.id, teacher_id: req.user.id } });
-    res.json({ msg: 'Quiz updated' });
+    const quiz = await Quiz.findByPk(req.params.id, {
+      include: [{ 
+        model: QuizQuestion, 
+        include: [{ model: QuizOption }] 
+      }]
+    });
+    res.json(quiz);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// DELETE /api/teacher/quizzes/:id
+router.put('/quizzes/:id', async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const { title, time_limit_minutes, status, target_labs, questions } = req.body;
+
+    await Quiz.update({ 
+      title, time_limit_minutes, status, target_labs,
+      total_marks: (questions?.length || 0)
+    }, { where: { id }, transaction: t });
+
+    if (questions && Array.isArray(questions)) {
+      const existingQs = await QuizQuestion.findAll({ where: { quiz_id: id }, transaction: t });
+      const existingQIds = existingQs.map(q => q.id);
+      const incomingQIds = questions.map(q => q.id).filter(id => !!id);
+
+      // Deletions
+      const toDeleteQs = existingQIds.filter(id => !incomingQIds.includes(id));
+      if (toDeleteQs.length > 0) {
+        await QuizQuestion.destroy({ where: { id: toDeleteQs }, transaction: t });
+      }
+
+      for (let i = 0; i < questions.length; i++) {
+        const q = questions[i];
+        const qData = {
+          question_text: q.question_text,
+          question_type: q.question_type || 'single',
+          order_index: i + 1
+        };
+
+        let qId = q.id;
+        if (qId) {
+          await QuizQuestion.update(qData, { where: { id: qId }, transaction: t });
+        } else {
+          const newQ = await QuizQuestion.create({ ...qData, quiz_id: id }, { transaction: t });
+          qId = newQ.id;
+        }
+
+        if (q.options && Array.isArray(q.options)) {
+          const existingOpts = await QuizOption.findAll({ where: { question_id: qId }, transaction: t });
+          const existingOptIds = existingOpts.map(o => o.id);
+          const incomingOptIds = q.options.map(o => o.id).filter(id => !!id);
+
+          // Delete options
+          const toDeleteOpts = existingOptIds.filter(id => !incomingOptIds.includes(id));
+          if (toDeleteOpts.length > 0) {
+            await QuizOption.destroy({ where: { id: toDeleteOpts }, transaction: t });
+          }
+
+          for (const opt of q.options) {
+            const optData = { option_text: opt.option_text, is_correct: opt.is_correct };
+            if (opt.id) {
+              await QuizOption.update(optData, { where: { id: opt.id }, transaction: t });
+            } else {
+              await QuizOption.create({ ...optData, question_id: qId }, { transaction: t });
+            }
+          }
+        }
+      }
+    }
+
+    await t.commit();
+    res.json({ msg: 'Quiz updated successfully' });
+  } catch (err) {
+    await t.rollback();
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.delete('/quizzes/:id', async (req, res) => {
   try {
-    await Quiz.destroy({ where: { id: req.params.id, teacher_id: req.user.id } });
+    await Quiz.destroy({ where: { id: req.params.id } });
     res.json({ msg: 'Quiz deleted' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -300,27 +687,49 @@ router.delete('/quizzes/:id', async (req, res) => {
 // ============================================================
 router.get('/notes', async (req, res) => {
   try {
-    const notes = await Note.find({ teacher_id: req.user.id }).sort({ createdAt: -1 });
+    const tid = req.user.id;
+    const subIds = await sequelize.query(`
+        SELECT subject_id FROM "TeacherSubjects" WHERE teacher_id = :tid
+        UNION
+        SELECT subject_id FROM "LabSlots" WHERE teacher_id = :tid AND subject_id IS NOT NULL
+        UNION
+        SELECT ml.subject_id FROM "MinorLabSlots" mls JOIN "MinorLabs" ml ON mls.minor_lab_id = ml.id WHERE mls.teacher_id = :tid
+    `, { replacements: { tid }, type: sequelize.QueryTypes.SELECT });
+    
+    const ids = subIds.map(r => r.subject_id);
+    const notes = await Note.find({ 
+      $or: [
+        { teacher_id: tid },
+        { subject_id: { $in: ids } }
+      ]
+    }).sort({ createdAt: -1 });
+    console.log(`[Teacher Debug] Notes fetched for TID ${tid}: ${notes.length}`);
     res.json(notes);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// @route   POST /api/teacher/notes
+router.post('/notes/upload-labbook', upload.single('pdf'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const fileUrl = `/uploads/labbooks/${req.file.filename}`;
+    res.json({ url: fileUrl });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.post('/notes', async (req, res) => {
   try {
-    const { subject_id, class_id, title, content_html, status } = req.body;
+    const { subject_id, class_id, title, content_html, status, target_labs, is_lab_book, lab_book_pdf_url } = req.body;
     const note = await Note.create({
       teacher_id: req.user.id, subject_id, class_id: class_id || null,
-      title, content_html, status: status || 'draft'
+      title, content_html, status: status || 'draft',
+      target_labs: target_labs || null, is_lab_book: !!is_lab_book, lab_book_pdf_url: lab_book_pdf_url || null
     });
     res.json({ msg: 'Notes saved successfully', noteId: note._id });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: 'Server error from MongoDB' });
   }
 });
 
-// PUT /api/teacher/notes/:id
 router.put('/notes/:id', async (req, res) => {
   try {
     await Note.findByIdAndUpdate(req.params.id, { title: req.body.title, content_html: req.body.content_html, status: req.body.status });
@@ -328,7 +737,6 @@ router.put('/notes/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// DELETE /api/teacher/notes/:id
 router.delete('/notes/:id', async (req, res) => {
   try {
     await Note.findByIdAndDelete(req.params.id);
@@ -342,104 +750,192 @@ router.get('/monitor/:classId', async (req, res) => {
     const idleAlerts = await IdleAlert.find({ teacher_id: req.user.id }).sort({ detected_at: -1 }).limit(20);
     res.json({ idleAlerts });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// @route   POST /api/teacher/send-parent-email
-router.post('/send-parent-email', async (req, res) => {
+// @route   GET /api/teacher/students/:id/full-details
+router.get('/students/:id/full-details', async (req, res) => {
   try {
-    const { parent_email, subject, message } = req.body;
-    const emailService = require('../services/emailService');
-    await emailService.sendEmail(parent_email, subject, message);
-    res.json({ msg: 'Email sent to parent successfully' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+    const studentId = req.params.id; // Could be User ID or Profile ID
 
-// @route   GET /api/teacher/students/:id/history
-router.get('/students/:id/history', async (req, res) => {
-  try {
-    const studentId = req.params.id;
-    
-    const profile = await sequelize.query(`
-      SELECT sp.id, u.id as user_id, u.name, u.email, sp.roll_no, c.name as class_name
+    // 1. Get Profile
+    const profileRows = await sequelize.query(`
+      SELECT sp.id as profile_id, u.id as user_id, u.name, u.email, u.is_active, 
+             sp.roll_no, c.name as class_name, sp.parent_email, co.name as course_name
       FROM "StudentProfiles" sp
       JOIN "Users" u ON sp.user_id = u.id
       LEFT JOIN "Classes" c ON sp.class_id = c.id
-      WHERE sp.id = :studentId
+      LEFT JOIN "Courses" co ON c.course_id = co.id
+      WHERE sp.id::text = :studentId OR u.id::text = :studentId
+      LIMIT 1
     `, { replacements: { studentId }, type: sequelize.QueryTypes.SELECT });
 
-    if (!profile.length) return res.status(404).json({ error: 'Student not found' });
+    if (!profileRows.length) return res.status(404).json({ error: 'Student not found' });
+    const profile = profileRows[0];
+    const userId = profile.user_id;
 
-    // Recent Lab Assignments
+    // 2. Get All Assignment Scores
     const assignments = await sequelize.query(`
-      SELECT sas.ai_marks, sas.submitted_at, aq.question_text, a.id as assignment_id
-      FROM "StudentAssignmentSubmissions" sas
-      JOIN "AssignmentQuestions" aq ON sas.question_id = aq.id
-      JOIN "AssignmentSets" s ON aq.set_id = s.id
-      JOIN "LabAssignments" a ON s.assignment_id = a.id
-      WHERE sas.student_id = :userId
-      ORDER BY sas.submitted_at DESC
-      LIMIT 10
-    `, { replacements: { userId: profile[0].user_id }, type: sequelize.QueryTypes.SELECT });
+      SELECT a.id, a.title, a.compiler_required,
+             COALESCE(SUM(sas.ai_marks), 0) as total_score,
+             COALESCE(SUM(q.max_marks), 0) as max_score,
+             MAX(sas.submitted_at) as last_submitted
+      FROM "LabAssignments" a
+      LEFT JOIN "AssignmentSets" s ON s.assignment_id = a.id
+      LEFT JOIN "AssignmentQuestions" q ON q.set_id = s.id
+      LEFT JOIN "StudentAssignmentSubmissions" sas ON sas.question_id = q.id AND sas.student_id = :userId
+      WHERE a.class_id = (SELECT class_id FROM "StudentProfiles" WHERE user_id = :userId)
+         OR EXISTS (
+           SELECT 1 FROM "StudentSubjects" ss 
+           WHERE ss.student_id = :userId AND ss.subject_id = a.subject_id
+         )
+      GROUP BY a.id, a.title, a.compiler_required
+      ORDER BY a.created_at DESC
+    `, { replacements: { userId }, type: sequelize.QueryTypes.SELECT });
 
-    // Recent Quizzes
+
+    // 3. Get All Quiz Scores
     const quizzes = await sequelize.query(`
-      SELECT sqs.total_marks, sqs.submitted_at, q.title, q.id as quiz_id
-      FROM "StudentQuizSubmissions" sqs
-      JOIN "Quizzes" q ON sqs.quiz_id = q.id
-      WHERE sqs.student_id = :userId
-      ORDER BY sqs.submitted_at DESC
-      LIMIT 10
-    `, { replacements: { userId: profile[0].user_id }, type: sequelize.QueryTypes.SELECT });
+      SELECT q.id, q.title, q.total_marks as max_marks,
+             COALESCE(sqs.total_marks, 0) as score,
+             sqs.submitted_at
+      FROM "Quizzes" q
+      LEFT JOIN "StudentQuizSubmissions" sqs ON sqs.quiz_id = q.id AND sqs.student_id = :userId
+      WHERE q.class_id = (SELECT class_id FROM "StudentProfiles" WHERE user_id = :userId)
+         OR EXISTS (
+           SELECT 1 FROM "StudentSubjects" ss 
+           WHERE ss.student_id = :userId AND ss.subject_id = q.subject_id
+         )
+      ORDER BY q.created_at DESC
+    `, { replacements: { userId }, type: sequelize.QueryTypes.SELECT });
 
-    res.json({
-      profile: profile[0],
-      assignments,
-      quizzes
-    });
+    // 4. Get Login/Logout Sessions (MongoDB)
+    const sessions = await StudentSession.find({ student_id: String(userId) }).sort({ login_time: -1 }).limit(20);
+
+    // 5. Aggregate Stats
+    const stats = {
+      avgAssignment: assignments.length ? assignments.reduce((acc, curr) => acc + Number(curr.total_score), 0) / assignments.length : 0,
+      avgQuiz: quizzes.length ? quizzes.reduce((acc, curr) => acc + Number(curr.score), 0) / quizzes.length : 0,
+      totalSessions: sessions.length
+    };
+
+    res.json({ profile, assignments, quizzes, sessions, stats });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error fetching student history' });
+    console.error("Full details error:", err);
+    res.status(500).json({ error: err.message });
   }
+});
+
+// POST /api/teacher/send-student-report
+router.post('/send-student-report', async (req, res) => {
+  try {
+    const { student_id, parent_email, studentData, assignmentData, quizData } = req.body;
+    const result = await sendStudentReport(student_id, parent_email, studentData, assignmentData, quizData);
+    
+    await StudentReport.create({
+      student_id,
+      report_html: `PDF Sent to ${parent_email}`,
+      pdf_path: result.reportPath,
+      ai_summary_paragraph: result.summary
+    });
+
+    res.json({ msg: 'Report sent successfully', summary: result.summary });
+  } catch(err) { res.status(500).json({error: err.message}); }
 });
 
 // ================= LEADERBOARD =================
 router.get('/leaderboard', async (req, res) => {
   try {
     const teacherId = req.user.id;
-    const [rows] = await sequelize.query(`
-      SELECT
-        u.id,
-        u.name,
-        sp.roll_no,
-        cl.name                                          AS class_name,
-        COUNT(DISTINCT sas.id)                           AS assignment_count,
-        COALESCE(AVG(sas.ai_marks), 0)                   AS avg_assignment_marks,
-        COUNT(DISTINCT sqs.id)                           AS quiz_count,
-        COALESCE(AVG(sqs.total_marks), 0)                AS avg_quiz_marks,
-        COALESCE(AVG(sas.ai_marks), 0) * 50.0 / 10
-          + COALESCE(AVG(sqs.total_marks), 0) * 50.0 / 100 AS total_score
-      FROM "Users" u
-      JOIN "StudentProfiles" sp ON sp.user_id = u.id
-      JOIN "Classes" cl          ON cl.id = sp.class_id
-      JOIN "TeacherSubjects" ts  ON ts.class_id = cl.id
-                                AND ts.teacher_id = :teacherId
-                                AND ts.type = 'major'
-      LEFT JOIN "StudentAssignmentSubmissions" sas ON sas.student_id = u.id
-      LEFT JOIN "StudentQuizSubmissions" sqs         ON sqs.student_id = u.id
-      WHERE u.role = 'student' AND u.is_active = true
-      GROUP BY u.id, u.name, sp.roll_no, cl.name
-      ORDER BY total_score DESC
-    `, { replacements: { teacherId }, type: sequelize.QueryTypes.SELECT });
+    const { taskType = 'both', sortBy = 'accuracy', classId, subjectId } = req.query;
 
-    res.json({ students: rows });
+    let whereClause = "";
+    const replacements = { teacherId, taskType, sortBy };
+
+    if (classId && classId !== 'N/A' && classId !== 'null') {
+      whereClause += ' AND cl."id" = :classId';
+      replacements.classId = classId;
+    }
+    if (subjectId) {
+      whereClause += ' AND (la."subject_id" = :subjectId OR qz."subject_id" = :subjectId)';
+      replacements.subjectId = subjectId;
+    }
+
+    const leaderboardData = await sequelize.query(`
+      SELECT 
+        u."id" as "student_id", 
+        u."name" as "student_name",
+        sp."roll_no",
+        cl."name" as "class_name",
+        CASE 
+          WHEN :taskType = 'lab' THEN COALESCE(l."lab_score", 0)
+          WHEN :taskType = 'quiz' THEN COALESCE(q."quiz_score", 0)
+          ELSE COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0)
+        END as "total_score",
+        CASE
+          WHEN :taskType = 'lab' THEN 
+            CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0)::float / l."lab_max") * 100 ELSE 0 END
+          WHEN :taskType = 'quiz' THEN 
+            CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0)::float / q."quiz_max") * 100 ELSE 0 END
+          ELSE
+            CASE WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
+                 THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0))::float / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))) * 100 
+                 ELSE 0 END
+        END as "accuracy"
+      FROM "Users" u
+      JOIN "StudentProfiles" sp ON u."id" = sp."user_id"
+      JOIN "Classes" cl ON cl."id" = sp."class_id"
+      JOIN "TeacherSubjects" ts ON ts."class_id" = cl."id" AND ts."teacher_id" = :teacherId
+      LEFT JOIN (
+        SELECT sub."student_id", SUM(sub."ai_marks") as "lab_score", SUM(sub."max_marks") as "lab_max" FROM (
+          SELECT sas."student_id", sas."ai_marks", aq."max_marks",
+                 ROW_NUMBER() OVER(PARTITION BY sas."student_id", sas."question_id" ORDER BY sas."submitted_at" DESC) as rn
+          FROM "StudentAssignmentSubmissions" sas
+          JOIN "AssignmentQuestions" aq ON sas."question_id" = aq."id"
+          JOIN "AssignmentSets" asets ON aq."set_id" = asets."id"
+          JOIN "LabAssignments" la ON asets."assignment_id" = la."id"
+          WHERE 1=1
+        ) sub WHERE rn = 1
+        GROUP BY sub."student_id"
+      ) l ON l."student_id" = u."id"
+      LEFT JOIN (
+        SELECT sub."student_id", SUM(sub."total_marks") as "quiz_score", SUM(sub."max_marks") as "quiz_max" FROM (
+          SELECT sqs."student_id", sqs."total_marks", qz."total_marks" as "max_marks",
+                 ROW_NUMBER() OVER(PARTITION BY sqs."student_id", sqs."quiz_id" ORDER BY sqs."submitted_at" DESC) as rn
+          FROM "StudentQuizSubmissions" sqs
+          JOIN "Quizzes" qz ON sqs."quiz_id" = qz."id"
+          WHERE 1=1
+        ) sub WHERE rn = 1
+        GROUP BY sub."student_id"
+      ) q ON q."student_id" = u."id"
+      WHERE u."role" = 'student' AND u."is_active" = true ${whereClause}
+      GROUP BY u."id", u."name", sp."roll_no", cl."name", l."lab_score", l."lab_max", q."quiz_score", q."quiz_max"
+      ORDER BY 
+        CASE WHEN :sortBy = 'accuracy' THEN 
+           (CASE
+            WHEN :taskType = 'lab' THEN 
+              CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0)::float / l."lab_max") * 100 ELSE 0 END
+            WHEN :taskType = 'quiz' THEN 
+              CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0)::float / q."quiz_max") * 100 ELSE 0 END
+            ELSE
+              CASE WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
+                   THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0))::float / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))) * 100 
+                   ELSE 0 END
+          END)
+        ELSE
+          (CASE 
+            WHEN :taskType = 'lab' THEN COALESCE(l."lab_score", 0)
+            WHEN :taskType = 'quiz' THEN COALESCE(q."quiz_score", 0)
+            ELSE COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0)
+          END)
+        END DESC, 
+        u."name" ASC
+    `, { replacements, type: sequelize.QueryTypes.SELECT });
+
+    res.json({ students: leaderboardData });
   } catch (err) {
-    console.error('Leaderboard error:', err.message);
+    console.error('[Teacher Leaderboard] Error:', err);
     res.status(500).json({ error: 'Failed to fetch leaderboard', detail: err.message });
   }
 });

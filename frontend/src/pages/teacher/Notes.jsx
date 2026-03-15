@@ -1,7 +1,37 @@
 import React, { useEffect, useState } from 'react';
-import { NotebookPen, Plus, Trash2, Eye, EyeOff, X, CheckCircle2, ChevronRight, Edit2 } from 'lucide-react';
+import { NotebookPen, Plus, Trash2, Eye, EyeOff, X, CheckCircle2, ChevronRight, Edit2, Download } from 'lucide-react';
 import api from '../../utils/axios';
 import { useNavigate } from 'react-router-dom';
+import html2pdf from 'html2pdf.js';
+import ReactQuill, { Quill } from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
+import ImageResize from '../../vendor/quill-image-resize/ImageResize';
+
+// Register image resize module and custom fonts
+window.Quill = Quill;
+Quill.register('modules/imageResize', ImageResize);
+
+const Font = Quill.import('formats/font');
+Font.whitelist = ['arial', 'courier-new', 'georgia', 'times-new-roman', 'verdana'];
+Quill.register(Font, true);
+
+const quillModules = {
+  toolbar: [
+    [{ 'header': [1, 2, 3, false] }],
+    [{ 'font': [false, 'arial', 'courier-new', 'georgia', 'times-new-roman', 'verdana'] }],
+    [{ 'size': ['small', false, 'large', 'huge'] }],
+    ['bold', 'italic', 'underline', 'strike'],
+    [{ 'color': [] }, { 'background': [] }],
+    [{ 'align': [] }],
+    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+    ['link', 'image', 'code-block'],
+    ['clean']
+  ],
+  imageResize: {
+    parchment: Quill.import('parchment'),
+    modules: ['Resize', 'DisplaySize', 'Toolbar']
+  }
+};
 
 /* ─── Create / Edit Form Modal ─── */
 const NoteForm = ({ subjects, defaultSubjectId, editNote, onSaved, onClose }) => {
@@ -12,8 +42,36 @@ const NoteForm = ({ subjects, defaultSubjectId, editNote, onSaved, onClose }) =>
     status: editNote?.status || 'draft',
     subject_id: editNote?.subject_id || defSub?.subject_id || '',
     class_id: editNote?.class_id || defSub?.class_id || '',
+    target_labs: editNote?.target_labs || [],
   });
   const [saving, setSaving] = useState(null); // null | 'draft' | 'published'
+  const [availableLabs, setAvailableLabs] = useState([]);
+
+  useEffect(() => {
+    if (!form.subject_id) {
+      setAvailableLabs([]);
+      return;
+    }
+    const sub = subjects.find(s => String(s.subject_id) === String(form.subject_id));
+    if (!sub) return;
+
+    if (sub.type === 'major' && form.class_id) {
+      api.get(`/teacher/labs/${form.class_id}`).then(res => setAvailableLabs(res.data)).catch(console.error);
+    } else if (sub.type === 'minor') {
+      api.get(`/teacher/minor-labs/${form.subject_id}`).then(res => setAvailableLabs(res.data)).catch(console.error);
+    } else {
+      setAvailableLabs([]);
+    }
+  }, [form.subject_id, form.class_id, subjects]);
+
+  const toggleLab = (labId) => {
+    setForm(f => ({
+      ...f,
+      target_labs: f.target_labs.includes(String(labId))
+        ? f.target_labs.filter(id => id !== String(labId))
+        : [...f.target_labs, String(labId)]
+    }));
+  };
 
   const submit = async (e, publishStatus) => {
     e.preventDefault();
@@ -30,17 +88,17 @@ const NoteForm = ({ subjects, defaultSubjectId, editNote, onSaved, onClose }) =>
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm overflow-y-auto py-8 px-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl border border-gray-100">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[95vw] h-[95vh] border border-gray-100 flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <div>
             <h2 className="text-lg font-bold text-gray-900">{editNote ? 'Edit Note' : 'New Note'}</h2>
             {defSub && !editNote && <p className="text-xs text-emerald-600 font-medium mt-0.5">{defSub.subject_name}</p>}
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
         </div>
-        <form onSubmit={submit} className="px-6 py-5 space-y-4">
-          <div className="grid grid-cols-3 gap-3">
+        <form onSubmit={submit} className="px-6 py-5 flex-1 flex flex-col overflow-hidden">
+          <div className="grid grid-cols-3 gap-3 flex-shrink-0 mb-4">
             <div className="col-span-2">
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Title *</label>
               <input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
@@ -58,17 +116,91 @@ const NoteForm = ({ subjects, defaultSubjectId, editNote, onSaved, onClose }) =>
             </div>
           </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Content * <span className="normal-case text-gray-400 font-normal">(HTML supported)</span></label>
+          <div className="flex-1 flex flex-col min-h-0 mb-4">
+            <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Content *</label>
             </div>
-            <textarea required value={form.content_html} onChange={e => setForm(f => ({ ...f, content_html: e.target.value }))}
-              rows={13} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-300 bg-gray-50 resize-none"
-              placeholder={"<h2>Introduction to OOP</h2>\n<p>Object Oriented Programming is a paradigm...</p>\n\n<h3>Key Concepts</h3>\n<ul>\n  <li>Encapsulation</li>\n  <li>Inheritance</li>\n</ul>\n\n<pre><code>class Hello {\n  public static void main(String[] args) {\n    System.out.println(\"Hello World\");\n  }\n}</code></pre>"} />
-            <p className="text-xs text-gray-400 mt-1.5">Use HTML tags: &lt;h2&gt;, &lt;p&gt;, &lt;ul&gt;, &lt;li&gt;, &lt;code&gt;, &lt;pre&gt;, &lt;strong&gt;, &lt;em&gt;</p>
+            <div className="bg-white rounded-xl overflow-hidden border border-gray-200 flex-1 flex flex-col">
+              <ReactQuill 
+                theme="snow"
+                value={form.content_html}
+                onChange={(value) => setForm(f => ({ ...f, content_html: value }))}
+                modules={quillModules}
+                className="quill-editor"
+              />
+            </div>
+            <style>{`
+              .quill-editor { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+              .quill-editor .ql-container {
+                flex: 1;
+                overflow-y: auto;
+                font-family: inherit;
+                font-size: 14px;
+                border-bottom: none !important;
+                border-left: none !important;
+                border-right: none !important;
+              }
+              .quill-editor .ql-toolbar {
+                border-top: none !important;
+                border-left: none !important;
+                border-right: none !important;
+                background-color: #f9fafb;
+                flex-shrink: 0;
+              }
+              .ql-font-arial { font-family: 'Arial', sans-serif; }
+              .quill-editor .ql-picker.ql-font { width: 150px !important; text-align: left; }
+              .quill-editor .ql-picker.ql-font .ql-picker-label[data-value='arial']::before,
+              .quill-editor .ql-picker.ql-font .ql-picker-item[data-value='arial']::before { content: 'Arial'; font-family: 'Arial', sans-serif; }
+              
+              .ql-font-times-new-roman { font-family: 'Times New Roman', serif; }
+              .quill-editor .ql-picker.ql-font .ql-picker-label[data-value='times-new-roman']::before,
+              .quill-editor .ql-picker.ql-font .ql-picker-item[data-value='times-new-roman']::before { content: 'Times New Roman'; font-family: 'Times New Roman', serif; }
+              
+              .ql-font-georgia { font-family: 'Georgia', serif; }
+              .quill-editor .ql-picker.ql-font .ql-picker-label[data-value='georgia']::before,
+              .quill-editor .ql-picker.ql-font .ql-picker-item[data-value='georgia']::before { content: 'Georgia'; font-family: 'Georgia', serif; }
+              
+              .ql-font-courier-new { font-family: 'Courier New', monospace; }
+              .quill-editor .ql-picker.ql-font .ql-picker-label[data-value='courier-new']::before,
+              .quill-editor .ql-picker.ql-font .ql-picker-item[data-value='courier-new']::before { content: 'Courier New'; font-family: 'Courier New', monospace; }
+              
+              .ql-font-verdana { font-family: 'Verdana', sans-serif; }
+              .quill-editor .ql-picker.ql-font .ql-picker-label[data-value='verdana']::before,
+              .quill-editor .ql-picker.ql-font .ql-picker-item[data-value='verdana']::before { content: 'Verdana'; font-family: 'Verdana', sans-serif; }
+              
+              /* Ensure bullets and numbers are visible inside the editor content */
+              .quill-editor .ql-editor ul, .quill-editor .ql-editor ol {
+                padding-left: 1.5rem !important;
+              }
+              .quill-editor .ql-editor ul > li {
+                list-style-type: disc !important;
+              }
+              .quill-editor .ql-editor ol > li {
+                list-style-type: decimal !important;
+              }
+              .quill-editor .ql-editor li::before {
+                display: none !important;
+              }
+            `}</style>
           </div>
 
-          <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+          <div className="border-t border-gray-100 pt-4 flex-shrink-0">
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Target Lab Batches <span className="text-gray-400 font-normal lowercase">(optional)</span></label>
+            {availableLabs.length === 0 ? (
+              <p className="text-sm text-gray-500 italic bg-gray-50 p-2 rounded-lg">Select a subject first to fetch its lab batches.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2 overflow-y-auto max-h-24">
+                {availableLabs.map(lab => (
+                  <label key={lab.id} className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg cursor-pointer transition-all ${form.target_labs.includes(String(lab.id)) ? 'bg-emerald-50 border-emerald-200 shadow-sm' : 'hover:bg-gray-50'}`}>
+                    <input type="checkbox" className="w-4 h-4 text-emerald-600 rounded" checked={form.target_labs.includes(String(lab.id))} onChange={() => toggleLab(lab.id)} />
+                    <span className="text-sm font-medium text-gray-700">{lab.name} {lab.roll_from ? `(${lab.roll_from}-${lab.roll_to})` : ''}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between pt-4 mt-4 border-t border-gray-100 flex-shrink-0">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-100 rounded-xl transition-colors">Cancel</button>
             <div className="flex gap-2.5">
               <button type="button" disabled={!!saving} onClick={e => submit(e, 'draft')}
@@ -119,6 +251,46 @@ const Notes = () => {
     await api.put(`/teacher/notes/${n._id}`, { ...n, status: n.status === 'published' ? 'draft' : 'published' });
     fetchData();
   };
+
+  const downloadPDF = (note) => {
+    const subName = getSubjectName(note.subject_id);
+    const element = document.createElement('div');
+    element.style.padding = '40px';
+    element.style.fontFamily = 'Arial, sans-serif';
+    element.innerHTML = `
+      <style>
+        .ql-font-arial { font-family: 'Arial', sans-serif; }
+        .ql-font-times-new-roman { font-family: 'Times New Roman', serif; }
+        .ql-font-georgia { font-family: 'Georgia', serif; }
+        .ql-font-courier-new { font-family: 'Courier New', monospace; }
+        .ql-font-verdana { font-family: 'Verdana', sans-serif; }
+        .ql-align-center { text-align: center; }
+        .ql-align-right { text-align: right; }
+        .ql-align-justify { text-align: justify; }
+        .ql-editor ul, .ql-editor ol { padding-left: 20px; }
+        .ql-editor img { max-width: 100%; height: auto; }
+      </style>
+      <div style="margin-bottom: 30px; border-bottom: 2px solid #10b981; padding-bottom: 15px;">
+        <h1 style="margin: 0; color: #111827; font-size: 28px;">${note.title}</h1>
+        <p style="margin: 10px 0 0 0; color: #6b7280; font-size: 14px;">
+          Subject: <strong>${subName || 'N/A'}</strong> | Published on: ${new Date(note.created_at).toLocaleDateString()}
+        </p>
+      </div>
+      <div class="ql-editor" style="color: #374151; line-height: 1.6;">
+        ${note.content_html}
+      </div>
+    `;
+
+    const opt = {
+      margin: 0.5,
+      filename: `${note.title.replace(/\s+/g, '_')}_Notes.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().from(element).set(opt).save();
+  };
+
   const del = async (id) => { if (!confirm('Delete this note?')) return; await api.delete(`/teacher/notes/${id}`); fetchData(); };
   const openEdit = (n) => { setEditNote(n); setShowForm(true); };
   const openCreate = () => { setEditNote(null); setShowForm(true); };
@@ -212,6 +384,10 @@ const Notes = () => {
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                      <button onClick={() => downloadPDF(n)}
+                        className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors" title="Download PDF">
+                        <Download className="w-3.5 h-3.5" />
+                      </button>
                       <button onClick={() => openEdit(n)}
                         className="p-1.5 rounded-lg bg-blue-50 text-blue-500 hover:bg-blue-100 transition-colors" title="Edit">
                         <Edit2 className="w-3.5 h-3.5" />
@@ -233,6 +409,9 @@ const Notes = () => {
                       dangerouslySetInnerHTML={{ __html: n.content_html.replace(/<[^>]+>/g, ' ').substring(0, 200) + '…' }} />
                   )}
                   <div className="mt-3 pt-3 border-t border-gray-50 flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => downloadPDF(n)} className="text-xs font-semibold text-emerald-600 hover:text-emerald-800 flex items-center gap-1">
+                      <Download className="w-3 h-3" /> Download
+                    </button>
                     <button onClick={() => openEdit(n)} className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1">
                       <Edit2 className="w-3 h-3" /> Edit note
                     </button>

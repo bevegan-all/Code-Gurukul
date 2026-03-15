@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Users, Search, GraduationCap, Mail } from 'lucide-react';
 import api from '../../utils/axios';
+import StudentDetailModal from '../../components/StudentDetailModal';
 
 const MyStudents = () => {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [selectedStudentId, setSelectedStudentId] = useState(null);
 
   useEffect(() => {
     api.get('/teacher/my-students')
@@ -82,7 +84,11 @@ const MyStudents = () => {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {classStudents.map(s => (
-                  <tr key={s.id} className="hover:bg-gray-50/50 transition-colors">
+                  <tr 
+                    key={s.id} 
+                    className="hover:bg-purple-50/50 cursor-pointer transition-all active:scale-[0.99]"
+                    onClick={() => setSelectedStudentId(s.id)}
+                  >
                     <td className="px-6 py-3.5">
                       <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-semibold text-xs flex-shrink-0">
@@ -110,6 +116,7 @@ const MyStudents = () => {
           </div>
         ))
       )}
+      {selectedStudentId && <StudentDetailModal studentId={selectedStudentId} onClose={() => setSelectedStudentId(null)} />}
     </div>
   );
 };

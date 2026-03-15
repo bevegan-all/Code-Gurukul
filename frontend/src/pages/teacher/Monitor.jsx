@@ -11,6 +11,11 @@ const Monitor = () => {
   const [liveScreenSrc, setLiveScreenSrc] = useState(null);
   const [isScreenMonitoring, setIsScreenMonitoring] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [currentLabSlot, setCurrentLabSlot] = useState(null);
+  const [labStudents, setLabStudents] = useState(new Set());
+  const [allSlotStudents, setAllSlotStudents] = useState([]); // Full student objects for offline list
+  const [useCurrentSlotOnly, setUseCurrentSlotOnly] = useState(false);
+  const [alerts, setAlerts] = useState([]); // List of {id, name, type: 'idle'}
 
   const socketRef = useRef(null);
   const screenRefreshInterval = useRef(null);
@@ -34,20 +39,63 @@ const Monitor = () => {
     socketRef.current = socket;
 
     socket.on('connect', () => {
+      // Fetch all classes to join their monitor rooms
       api.get('/teacher/my-subjects').then((res) => {
-        const subjects = res.data.filter(s => s.type === 'major' && s.class_id);
-        const classIds = [...new Set(subjects.map(s => s.class_id))];
+        const classIds = [...new Set(res.data.filter(s => s.class_id).map(s => s.class_id))];
         classIds.forEach((classId) => socket.emit('join_teacher_monitor', { classId }));
       }).catch(err => console.error('Could not fetch classes for monitor', err));
+
+      // Fetch current active lab slot
+      api.get('/teacher/current-lab').then(res => {
+        if (res.data) {
+          setCurrentLabSlot(res.data);
+          setUseCurrentSlotOnly(true);
+          const { subject_id, lab_id } = res.data;
+          api.get(`/teacher/my-students-by-subject/${subject_id}`, { params: { lab_id } })
+            .then(sres => {
+              setLabStudents(new Set(sres.data.map(s => s.id)));
+              setAllSlotStudents(sres.data);
+            });
+        }
+      }).catch(console.error);
     });
 
-    socket.on('student:activity', (data) => {
+    const handleActivity = (data) => {
+      const studentId = String(data.studentId);
       setOnlineStudents(prev => {
         const next = new Map(prev);
-        next.set(data.studentId, { ...data, lastSeen: Date.now() });
+        const old = next.get(studentId);
+        let idleSince = old?.idleSince;
+        
+        const currentActivity = data.activity || 'Active';
+
+        if (currentActivity === 'Idle' && old?.activity !== 'Idle') {
+          idleSince = Date.now();
+        } else if (currentActivity === 'Active' || currentActivity === 'Offline') {
+          idleSince = null;
+          // Clear alerts if they become active OR go offline
+          setAlerts(prevA => prevA.filter(a => String(a.id) !== studentId));
+        }
+        
+        if (selectedStudentRef.current && String(selectedStudentRef.current.studentId) === studentId && currentActivity === 'Offline') {
+          setIsScreenMonitoring(false);
+          setLiveScreenSrc(null);
+        }
+
+        next.set(studentId, { 
+          ...data, 
+          studentId,
+          activity: currentActivity, 
+          lastSeen: Date.now(), 
+          idleSince 
+        });
         return next;
       });
-    });
+    };
+
+    socket.on('student:online', handleActivity);
+    socket.on('student:ping', handleActivity);
+    socket.on('student:activity', handleActivity);
 
     socket.on('student:screen_stream', (data) => {
       const current = selectedStudentRef.current;
@@ -62,17 +110,15 @@ const Monitor = () => {
         const next = new Map(prev);
         let changed = false;
         for (const [id, data] of next.entries()) {
-          if (now - data.lastSeen > 15000 && data.activity !== 'Offline') {
-            next.set(id, { ...data, activity: 'Offline', action: 'Disconnected' });
-            changed = true;
-          } else if (now - data.lastSeen > 8000 && data.activity === 'Active') {
-            next.set(id, { ...data, activity: 'Idle', action: 'Inactive' });
+          // Timeout Disconnect (30s)
+          if (now - data.lastSeen > 30000 && data.activity !== 'Offline') {
+            next.set(id, { ...data, activity: 'Offline', action: 'Disconnected', idleSince: null });
             changed = true;
           }
         }
         return changed ? next : prev;
       });
-    }, 3000);
+    }, 5000);
 
     return () => {
       socket.disconnect();
@@ -80,6 +126,22 @@ const Monitor = () => {
       clearInterval(screenRefreshInterval.current);
     };
   }, []);
+
+  // Dedicated Effect for Alerting
+  useEffect(() => {
+    const alertInterval = setInterval(() => {
+      const now = Date.now();
+      onlineStudents.forEach((data, id) => {
+        if (data.activity === 'Idle' && data.idleSince && (now - data.idleSince > 10000)) {
+          setAlerts(prevA => {
+            if (prevA.some(a => String(a.id) === String(id))) return prevA;
+            return [...prevA, { id: String(id), name: data.studentName || `Student #${id}`, type: 'idle' }];
+          });
+        }
+      });
+    }, 5000);
+    return () => clearInterval(alertInterval);
+  }, [onlineStudents]);
 
   const handleStudentClick = async (studentId, data) => {
     // Stop watching previous student
@@ -125,6 +187,23 @@ const Monitor = () => {
     setIsFullscreen(!isFullscreen);
   };
 
+  const handleToggleRestriction = async () => {
+    if (!currentLabSlot) return;
+    const newVal = !currentLabSlot.is_unrestricted;
+    try {
+      const res = await api.post('/teacher/toggle-restriction', {
+        slotId: currentLabSlot.id,
+        type: currentLabSlot.type,
+        isUnrestricted: newVal
+      });
+      if (res.data.success) {
+        setCurrentLabSlot(prev => ({ ...prev, is_unrestricted: newVal }));
+      }
+    } catch (error) {
+      console.error('Failed to toggle restriction', error);
+    }
+  };
+
   // Handle ESC key exiting fullscreen
   useEffect(() => {
     const onFsChange = () => {
@@ -135,6 +214,30 @@ const Monitor = () => {
   }, []);
 
   const studentsList = Array.from(onlineStudents.values()).sort((a, b) => b.lastSeen - a.lastSeen);
+  
+  // MERGE LOGIC: Show all students if in current slot mode
+  let filteredStudents = [];
+  if (useCurrentSlotOnly && currentLabSlot) {
+    // Start with all students assigned to this lab
+    filteredStudents = allSlotStudents.map(student => {
+      const liveData = onlineStudents.get(String(student.id));
+      if (liveData) return liveData;
+      
+      // Fallback for offline students
+      return {
+        studentId: student.id,
+        studentName: student.name,
+        rollNo: student.roll_no,
+        activity: 'Offline',
+        action: 'Disconnected',
+        lastSeen: 0
+      };
+    });
+    // Sort: Online first
+    filteredStudents.sort((a, b) => (b.activity === 'Offline' ? -1 : 1) - (a.activity === 'Offline' ? -1 : 1));
+  } else {
+    filteredStudents = studentsList;
+  }
 
   const statusColor = (activity) => {
     if (activity === 'Active') return 'bg-emerald-500';
@@ -152,21 +255,83 @@ const Monitor = () => {
     <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-100px)]">
       {/* Left: Student Grid */}
       <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 p-6 overflow-y-auto">
-        <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-          <Activity className="text-emerald-500" /> Live Lab Monitor
-        </h2>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+            <Activity className="text-emerald-500" /> Live Lab Monitor
+          </h2>
+          {currentLabSlot && (
+            <div className="flex items-center gap-3">
+              <label 
+                className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-all ${
+                  currentLabSlot.is_unrestricted 
+                    ? 'bg-amber-50 border-amber-200 text-amber-700 shadow-sm' 
+                    : 'bg-slate-50 border-slate-200 text-slate-600'
+                }`}
+                title={currentLabSlot.is_unrestricted ? 'Students are FREE' : 'Students are RESTRICTED'}
+              >
+                <div className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="sr-only peer" 
+                    checked={!!currentLabSlot.is_unrestricted} 
+                    onChange={handleToggleRestriction}
+                  />
+                  <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-widest">Unrestrict</span>
+              </label>
 
-        {studentsList.length === 0 ? (
+              <label className="flex items-center gap-2 cursor-pointer bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors hover:bg-slate-100">
+                <input 
+                  type="checkbox" 
+                  checked={useCurrentSlotOnly} 
+                  onChange={e => setUseCurrentSlotOnly(e.target.checked)}
+                  className="w-4 h-4 accent-emerald-500"
+                />
+                <span className="text-xs font-bold text-slate-600">Current Slot ({currentLabSlot.subject_name})</span>
+              </label>
+            </div>
+          )}
+        </div>
+
+        {/* Alerts Section */}
+        {alerts.length > 0 && (
+          <div className="mb-6 space-y-2">
+            {alerts.map(alert => (
+              <div key={alert.id} className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-xl flex items-center justify-between animate-bounce shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center text-amber-600">
+                    <Clock size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-amber-900">Inactivity Alert!</p>
+                    <p className="text-xs text-amber-700"><b>{alert.name}</b> has been idle for more than 10 seconds.</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setAlerts(prev => prev.filter(a => a.id !== alert.id))}
+                  className="p-1 hover:bg-amber-100 rounded-lg text-amber-500"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {filteredStudents.length === 0 ? (
           <div className="text-center p-12 bg-slate-50 rounded-lg border border-slate-100">
             <div className="animate-pulse w-12 h-12 bg-slate-200 rounded-full mx-auto mb-3 flex items-center justify-center">
               <MonitorPlay className="w-6 h-6 text-slate-400" />
             </div>
-            <p className="text-slate-500 font-medium text-lg">Waiting for students...</p>
+            <p className="text-slate-500 font-medium text-lg">
+              {useCurrentSlotOnly ? 'No students online in this slot' : 'Waiting for students...'}
+            </p>
             <p className="text-slate-400 text-sm mt-1">Students appear automatically when they open the App.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {studentsList.map((st) => (
+            {filteredStudents.map((st) => (
               <div
                 key={st.studentId}
                 onClick={() => handleStudentClick(st.studentId, st)}
@@ -251,7 +416,7 @@ const Monitor = () => {
                   <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-4 py-3 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                     <div className="flex items-center gap-2 text-white text-xs">
                       <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                      Live — updates every 2.5s
+                      Live — updates every 0.5s
                     </div>
                     <div className="flex items-center gap-2">
                       <button

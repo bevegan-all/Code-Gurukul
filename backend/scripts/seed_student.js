@@ -35,7 +35,7 @@ async function seedData() {
     // 3. Find or create Class
     let [cls] = await Class.findOrCreate({
       where: { name: 'B.Tech CS Year 1', course_id: course.id },
-      defaults: { name: 'B.Tech CS Year 1', course_id: course.id }
+      defaults: { name: 'B.Tech CS Year 1', course_id: course.id, year: 'FY', division: 'A' }
     });
     log('Class: id=' + cls.id + ' name=' + cls.name);
 
@@ -117,16 +117,28 @@ async function seedData() {
       log('Assignment created for: ' + sub.name);
     }
 
-    // 9. Create published Notes in MongoDB
+    // 9. Clean up old Notes and Create new published Notes in MongoDB
+    await Note.deleteMany({});
+    log('Deleted all old notes from MongoDB.');
+
     for (const sub of subjects) {
       const existing = await Note.findOne({ title: 'Notes: ' + sub.name, class_id: cls.id });
       if (!existing) {
+        let content = '';
+        if (sub.name === 'Data Structures') {
+           content = '<h2>Data Structures Overview</h2><p>Welcome to the <strong>Data Structures</strong> course.</p><h3>Key Topics</h3><ul><li>Arrays and Strings</li><li>Linked Lists</li><li>Trees and Graphs</li></ul><p>Example of an array declaration:</p><pre><code>int[] numbers = {1, 2, 3, 4, 5};</code></pre><p><span style="color: rgb(230, 0, 0);">Important:</span> Make sure to carefully study pointers and memory management.</p>';
+        } else if (sub.name === 'Algorithms') {
+           content = '<h2>Introduction to Algorithms</h2><p>Here we will discuss time and space complexity.</p><h3>Big O Notation</h3><ol><li>O(1) - Constant time</li><li>O(n) - Linear time</li><li>O(n^2) - Quadratic time</li></ol><p><strong style="background-color: rgb(255, 255, 0);">Note:</strong> Review the common sorting algorithms before the next lab session!</p>';
+        } else {
+           content = `<h2>${sub.name}</h2><p>Welcome to the study material for <strong>${sub.name}</strong>.</p><blockquote><p>Consistency is the key to mastering this subject.</p></blockquote><p>Please refer to the course syllabus for more detailed information.</p>`;
+        }
+
         await Note.create({
           teacher_id: teacher.id,
           class_id: cls.id,
           subject_id: sub.id,
           title: 'Notes: ' + sub.name,
-          content_html: '<h2>' + sub.name + '</h2><p>Study material for ' + sub.name + '</p>',
+          content_html: content,
           status: 'published'
         });
         log('Note created for: ' + sub.name);

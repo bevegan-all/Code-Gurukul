@@ -1,0 +1,16 @@
+[
+  {
+    "constraint_name": "StudentSubjects_student_id_fkey",
+    "table_name": "StudentSubjects",
+    "column_name": "student_id",
+    "foreign_table_name": "Users",
+    "foreign_column_name": "id"
+  },
+  {
+    "constraint_name": "StudentSubjects_subject_id_fkey",
+    "table_name": "StudentSubjects",
+    "column_name": "subject_id",
+    "foreign_table_name": "Subjects",
+    "foreign_column_name": "id"
+  }
+]

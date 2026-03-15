@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeGurukul — Complete Implementation Plan & Architecture</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true, theme: 'base', themeVariables: {
+            primaryColor: '#dbeafe', primaryTextColor: '#1e3a5f', primaryBorderColor: '#93c5fd',
+            lineColor: '#64748b', secondaryColor: '#f0fdf4', tertiaryColor: '#fef3c7',
+            fontFamily: 'Inter, sans-serif', fontSize: '14px'
+        }});
+    </script>
+    <style>
+        :root {
+            --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --muted: #64748b;
+            --accent: #2563eb; --accent-light: #dbeafe; --border: #e2e8f0;
+            --success: #16a34a; --warning: #d97706; --danger: #dc2626;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 0 2rem; }
+
+        /* Hero */
+        .hero { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #06b6d4 100%); color: white; padding: 5rem 0 4rem; position: relative; overflow: hidden; }
+        .hero::after { content: ''; position: absolute; bottom: -2px; left: 0; right: 0; height: 60px; background: var(--bg); clip-path: ellipse(55% 100% at 50% 100%); }
+        .hero h1 { font-size: 3.5rem; font-weight: 900; letter-spacing: -0.03em; }
+        .hero .subtitle { font-size: 1.25rem; color: #bfdbfe; margin-top: 0.75rem; max-width: 750px; font-weight: 300; }
+        .hero .badge { display: inline-block; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2); padding: 0.35rem 1rem; border-radius: 999px; font-size: 0.8rem; margin-bottom: 1.25rem; font-weight: 500; }
+
+        /* Sections */
+        section { padding: 3.5rem 0; }
+        .section-title { font-size: 1.85rem; font-weight: 800; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.6rem; }
+        .section-subtitle { color: var(--muted); font-size: 1rem; margin-bottom: 2rem; }
+
+        /* Cards */
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 1rem; padding: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+        .card h3 { font-size: 1.2rem; font-weight: 700; margin-bottom: 0.75rem; }
+        .card p, .card li { color: #475569; font-size: 0.95rem; }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+        @media (max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+        /* Icon badges */
+        .icon-badge { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; margin-bottom: 1rem; flex-shrink: 0; }
+        .icon-badge.blue { background: #dbeafe; }
+        .icon-badge.green { background: #dcfce7; }
+        .icon-badge.amber { background: #fef3c7; }
+        .icon-badge.red { background: #fee2e2; }
+        .icon-badge.purple { background: #f3e8ff; }
+        .icon-badge.cyan { background: #cffafe; }
+
+        /* Feature list */
+        .feature-list { list-style: none; }
+        .feature-list li { padding: 0.6rem 0; display: flex; align-items: flex-start; gap: 0.75rem; }
+        .feature-list li::before { content: '✓'; font-weight: 700; color: var(--success); flex-shrink: 0; margin-top: 2px; }
+
+        /* Tech stack pills */
+        .pill { display: inline-flex; align-items: center; gap: 0.4rem; background: #f1f5f9; border: 1px solid var(--border); padding: 0.35rem 0.85rem; border-radius: 999px; font-size: 0.82rem; font-weight: 500; margin: 0.25rem; }
+        .pill.google { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+
+        /* Mermaid */
+        .diagram-wrap { background: white; border: 1px solid var(--border); border-radius: 1rem; padding: 2rem; margin: 1.25rem 0 2.5rem; overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+        .diagram-wrap .mermaid { display: flex; justify-content: center; }
+        .diagram-label { font-size: 1.15rem; font-weight: 700; margin-bottom: 0.35rem; }
+        .diagram-description { color: var(--muted); font-size: 0.9rem; margin-bottom: 0.25rem; }
+
+        /* Table */
+        .data-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .data-table th { background: #f1f5f9; text-align: left; padding: 0.75rem 1rem; font-weight: 600; border-bottom: 2px solid var(--border); }
+        .data-table td { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); }
+        .data-table tr:last-child td { border-bottom: none; }
+        .data-table code { background: #f1f5f9; padding: 0.15rem 0.45rem; border-radius: 4px; font-size: 0.82rem; font-family: 'Courier New', monospace; }
+
+        /* Separator */
+        .sep { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+
+        /* Footer */
+        footer { background: #0f172a; color: #94a3b8; padding: 2.5rem 0; text-align: center; font-size: 0.85rem; margin-top: 2rem; }
+
+        /* TOC */
+        .toc { background: #f8fafc; border: 1px solid var(--border); border-radius: 1rem; padding: 1.75rem 2rem; }
+        .toc h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.75rem; }
+        .toc ol { padding-left: 1.25rem; }
+        .toc li { padding: 0.3rem 0; }
+        .toc a { color: var(--accent); text-decoration: none; font-weight: 500; font-size: 0.92rem; }
+        .toc a:hover { text-decoration: underline; }
+
+        .highlight-box { border-left: 4px solid var(--accent); background: var(--accent-light); padding: 1rem 1.25rem; border-radius: 0 0.5rem 0.5rem 0; margin: 1rem 0; }
+        .highlight-box p { color: #1e40af; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+
+<!-- ==================== HERO ==================== -->
+<header class="hero">
+    <div class="container">
+        <span class="badge">📄 Complete Implementation Plan — v1.0</span>
+        <h1>🎓 CodeGurukul</h1>
+        <p class="subtitle">The Ultimate Educational Ecosystem & Secure Coding Environment — A unified platform blending cloud-based classroom management with a lockdown desktop IDE for students, powered by AI-driven grading and real-time monitoring.</p>
+    </div>
+</header>
+
+<main class="container">
+
+<!-- ==================== TOC ==================== -->
+<section>
+    <div class="toc">
+        <h3>📑 Table of Contents</h3>
+        <ol>
+            <li><a href="#problem">Problem Statement</a></li>
+            <li><a href="#solution">Our Solution</a></li>
+            <li><a href="#features">Features Offered</a></li>
+            <li><a href="#tech">Technology Stack & Google Technologies</a></li>
+            <li><a href="#arch">High-Level Architecture Diagram</a></li>
+            <li><a href="#deployment">Deployment & Infrastructure Flow</a></li>
+            <li><a href="#usecase">Use Case Diagram</a></li>
+            <li><a href="#sequence">Assignment & Grading Sequence Flow</a></li>
+            <li><a href="#monitoring">Real-Time Monitoring Flow</a></li>
+            <li><a href="#compiler">Secure Compilation Engine Flow</a></li>
+            <li><a href="#er">Entity-Relationship (ER) Diagram</a></li>
+            <li><a href="#uml">UML Class Diagram</a></li>
+            <li><a href="#api">API Route Map</a></li>
+            <li><a href="#db">Database Schema Overview</a></li>
+            <li><a href="#roles">User Roles & Permissions</a></li>
+            <li><a href="#screens">Screen Inventory</a></li>
+            <li><a href="#security">Security Measures</a></li>
+        </ol>
+    </div>
+</section>
+
+<!-- ==================== 1. PROBLEM STATEMENT ==================== -->
+<section id="problem">
+    <h2 class="section-title">🔴 1. Problem Statement</h2>
+    <p class="section-subtitle">The challenges faced by educational institutions running programming labs.</p>
+    <div class="grid-2">
+        <div class="card">
+            <div class="icon-badge red">🚫</div>
+            <h3>Lack of Lab Control</h3>
+            <p>Students easily switch to browsers, open ChatGPT, or copy code from peers during lab sessions. Standard computer labs provide full OS access with no lockdown mechanism, defeating the purpose of practical assessments.</p>
+        </div>
+        <div class="card">
+            <div class="icon-badge amber">⏱️</div>
+            <h3>Manual Grading Bottleneck</h3>
+            <p>A single teacher managing 60+ students cannot evaluate hundreds of code submissions in real-time. Manual grading is slow, inconsistent, and introduces human bias. By the time feedback reaches students, the learning window has passed.</p>
+        </div>
+        <div class="card">
+            <div class="icon-badge purple">👁️</div>
+            <h3>Zero Real-Time Visibility</h3>
+            <p>Teachers have no way to see what each student is actually typing live. There is no system to detect idle students, students struggling silently, or detect when a student has Alt+Tabbed to an unauthorized application.</p>
+        </div>
+        <div class="card">
+            <div class="icon-badge blue">🛠️</div>
+            <h3>IDE Fragmentation</h3>
+            <p>Students use different IDEs (VS Code, Dev-C++, Turbo C) with varying compilers, creating an inconsistent environment. Setting up compilers on individual lab machines is tedious, error-prone, and wastes valuable class time.</p>
+        </div>
+    </div>
+</section>
+
+<!-- ==================== 2. SOLUTION ==================== -->
+<section id="solution">
+    <h2 class="section-title">🟢 2. Our Solution</h2>
+    <p class="section-subtitle">A dual-platform approach that addresses every challenge.</p>
+    <div class="card" style="border-left: 4px solid var(--success);">
+        <p style="font-size:1.05rem;"><strong>CodeGurukul</strong> is a three-part system:</p>
+        <br>
+        <div class="grid-3">
+            <div>
+                <div class="icon-badge blue">🌐</div>
+                <h3>Cloud Web Portal</h3>
+                <p>Hosted on <strong>Vercel</strong>, accessible from any browser. Provides separate dashboards for <strong>Admins</strong> (manage users, classes, departments) and <strong>Teachers</strong> (create assignments, quizzes, notes, and view live monitoring).</p>
+            </div>
+            <div>
+                <div class="icon-badge green">🖥️</div>
+                <h3>Secure Windows App</h3>
+                <p>A compiled <strong>Electron</strong> desktop application that runs in <strong>full kiosk mode</strong>. Blocks Alt+Tab, Task Manager, and all shortcuts. Contains a built-in Monaco Code Editor with multi-language local compilation.</p>
+            </div>
+            <div>
+                <div class="icon-badge amber">⚙️</div>
+                <h3>Backend Server</h3>
+                <p>A <strong>Node.js/Express</strong> server running on a school PC. Connected to <strong>PostgreSQL</strong> and <strong>MongoDB</strong> databases locally, and exposed to the internet via <strong>ngrok</strong> tunneling for remote access.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ==================== 3. FEATURES ==================== -->
+<section id="features">
+    <h2 class="section-title">✨ 3. Features Offered</h2>
+    <p class="section-subtitle">Everything CodeGurukul provides out of the box.</p>
+    <div class="grid-2">
+        <div class="card">
+            <h3>👨‍💼 Admin Features</h3>
+            <ul class="feature-list">
+                <li>Create, edit, and disable Teachers and Students with welcome email notifications</li>
+                <li>Manage Departments → Courses → Classes → Subjects hierarchy</li>
+                <li>Assign teachers to subjects (major & minor) per class</li>
+                <li>View system-wide leaderboard with rankings</li>
+                <li>Password reset via 6-digit OTP email verification</li>
+            </ul>
+        </div>
+        <div class="card">
+            <h3>👩‍🏫 Teacher Features</h3>
+            <ul class="feature-list">
+                <li>Create Lab Assignments with multiple sets and questions per subject/class</li>
+                <li>Create Quizzes with MCQ support (single/multiple correct answers)</li>
+                <li>Write and publish rich HTML Notes for students</li>
+                <li><strong>Live Monitor Dashboard:</strong> See every student online/offline in real-time</li>
+                <li><strong>Screen Streaming:</strong> Click on any student to view their live screen</li>
+                <li>View AI-graded submissions with override capability</li>
+                <li>Subject-wise leaderboard with automatic ranking</li>
+            </ul>
+        </div>
+        <div class="card">
+            <h3>🧑‍🎓 Student Features (Windows App)</h3>
+            <ul class="feature-list">
+                <li>Login via secure Kiosk desktop application (blocks all system shortcuts)</li>
+                <li>View assigned lab assignments and open the Lab Workspace (Monaco IDE)</li>
+                <li>Write, compile, and test code locally in 5 languages (C, C++, Java, Python, Node.js)</li>
+                <li>Submit code for instant AI grading via Google Gemini</li>
+                <li>Take timed quizzes with auto-submit</li>
+                <li>Access teacher-published Notes</li>
+                <li>Use the <strong>Gemini Guru AI Tutor</strong> for context-aware coding help (without revealing answers)</li>
+                <li>Free Sandbox mode for open-ended practice and exploration</li>
+                <li>View personal Leaderboard with class rankings</li>
+            </ul>
+        </div>
+        <div class="card">
+            <h3>🤖 AI & Automation Features</h3>
+            <ul class="feature-list">
+                <li><strong>AI Auto-Grading:</strong> Compares student code against teacher's expected logic using Google Gemini, assigns a score out of 10 with a reason</li>
+                <li><strong>Gemini Guru Chatbot:</strong> Context-aware conversational AI that guides students without directly providing answers; tracks chatbot usage count per submission</li>
+                <li><strong>Multi-Key Rotation:</strong> Supports up to 4 Gemini API keys, auto-rotates on rate-limit (429) errors</li>
+                <li><strong>Model Fallback Chain:</strong> Gracefully falls back through gemini-2.5-flash → 2.5-flash-lite → 2.0-flash → 1.5-flash</li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<!-- ==================== 4. TECH STACK ==================== -->
+<section id="tech">
+    <h2 class="section-title">🛠️ 4. Technology Stack</h2>
+    <p class="section-subtitle">Core technologies and Google services powering CodeGurukul.</p>
+
+    <div class="grid-2">
+        <div class="card">
+            <h3>Backend</h3>
+            <div>
+                <span class="pill">Node.js</span><span class="pill">Express.js</span><span class="pill">Socket.IO</span>
+                <span class="pill">Sequelize ORM</span><span class="pill">Mongoose ODM</span><span class="pill">Helmet</span>
+                <span class="pill">bcryptjs</span><span class="pill">jsonwebtoken</span><span class="pill">nodemailer</span>
+                <span class="pill">child_process (spawn)</span><span class="pill">uuid</span>
+            </div>
+            <br>
+            <h3>Frontend (Web Portal)</h3>
+            <div>
+                <span class="pill">React 19</span><span class="pill">Vite 6</span><span class="pill">Tailwind CSS v4</span>
+                <span class="pill">React Router v7</span><span class="pill">Axios</span><span class="pill">Lucide React</span>
+                <span class="pill">Socket.IO Client</span>
+            </div>
+            <br>
+            <h3>Windows App (Desktop)</h3>
+            <div>
+                <span class="pill">Electron 34</span><span class="pill">React 19</span><span class="pill">Vite 6</span>
+                <span class="pill">Monaco Editor</span><span class="pill">Framer Motion</span>
+                <span class="pill">Socket.IO Client</span><span class="pill">html2canvas</span><span class="pill">canvas-confetti</span>
+            </div>
+        </div>
+        <div class="card" style="border: 2px solid #93c5fd;">
+            <h3 style="color: #1d4ed8; margin-bottom: 1rem;">🟦 Google Technologies Used</h3>
+            <div style="margin-bottom: 1.5rem;">
+                <span class="pill google" style="font-size:0.95rem; padding: 0.5rem 1rem;"><strong>Google Gemini API</strong></span>
+                <p style="margin-top: 0.6rem; font-size: 0.9rem; color: #475569;">
+                    Powering the <strong>automated AI grading engine</strong> — evaluates the correctness of student code submissions against the teacher's expected logic and assigns a score from 0-10 with contextual feedback.
+                </p>
+                <p style="margin-top: 0.4rem; font-size: 0.9rem; color: #475569;">
+                    Powering the <strong>Gemini Guru AI Tutor</strong> — a context-aware chatbot accessible in the student IDE via Ctrl+G to receive guided hints without direct answers.
+                </p>
+                <p style="margin-top: 0.4rem; font-size: 0.9rem; color: #475569;">
+                    Powers <strong>AI student reports</strong> — auto-generates a summary paragraph about each student's performance and areas of improvement.
+                </p>
+                <p style="margin-top: 0.4rem; font-size: 0.9rem; color: #475569;">
+                    Uses models: <code>gemini-2.5-flash</code>, <code>gemini-2.5-flash-lite</code>, <code>gemini-2.0-flash</code>, <code>gemini-1.5-flash</code> with auto-fallback.
+                </p>
+            </div>
+            <hr class="sep">
+            <div style="margin-top: 1rem;">
+                <span class="pill google" style="font-size:0.95rem; padding: 0.5rem 1rem;"><strong>Google V8 JavaScript Engine</strong></span>
+                <p style="margin-top: 0.6rem; font-size: 0.9rem; color: #475569;">
+                    Powers both the <strong>Node.js backend</strong> server and the <strong>Electron/Chromium</strong> runtime that drives the secure Windows desktop application. V8 is the underlying engine that makes the entire system run.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid-3" style="margin-top: 1.5rem;">
+        <div class="card">
+            <h3>📦 Databases</h3>
+            <div><span class="pill">PostgreSQL 15</span><span class="pill">MongoDB</span></div>
+            <p style="margin-top: 0.5rem;">PostgreSQL stores all relational data (users, classes, assignments, grades). MongoDB stores flexible documents (notes, chatbot sessions, notifications, idle alerts).</p>
+        </div>
+        <div class="card">
+            <h3>🚀 Deployment</h3>
+            <div><span class="pill">Vercel</span><span class="pill">ngrok</span><span class="pill">GitHub</span></div>
+            <p style="margin-top: 0.5rem;">Frontend hosted free on Vercel. Backend runs locally on a school PC and is exposed via ngrok tunnel. Source code versioned on GitHub with sensitive data in .gitignore.</p>
+        </div>
+        <div class="card">
+            <h3>🖥️ Compilers (Local)</h3>
+            <div><span class="pill">GCC / G++</span><span class="pill">Python</span><span class="pill">Node.js</span><span class="pill">javac / java</span></div>
+            <p style="margin-top: 0.5rem;">All compilers are installed on the server machine. Student code is written to a temp sandbox, compiled/run via child_process.spawn, and output is streamed via WebSocket.</p>
+        </div>
+    </div>
+</section>
+
+<!-- ==================== 5. ARCHITECTURE DIAGRAM ==================== -->
+<section id="arch">
+    <h2 class="section-title">🏗️ 5. High-Level Architecture Diagram</h2>
+    <p class="section-subtitle">How all three platforms interconnect.</p>
+    <div class="diagram-wrap">
+        <div class="mermaid">
+            graph TB
+                subgraph "☁️ Cloud - Vercel"
+                    WP["🌐 Web Portal<br/>(React + Vite)<br/>code-gurukul.vercel.app"]
+                end
+
+                subgraph "🏫 School Server PC"
+                    BE["⚙️ Node.js/Express<br/>Backend Server<br/>localhost:5000"]
+                    PG[("🐘 PostgreSQL<br/>Users, Classes,<br/>Assignments, Grades")]
+                    MG[("🍃 MongoDB<br/>Notes, Chatbot,<br/>Notifications")]
+                    COMP["🔧 Local Compilers<br/>GCC, Python, Node,<br/>javac"]
+                    NG["🔗 ngrok Tunnel<br/>*.ngrok-free.dev"]
+                end
+
+                subgraph "💻 Student Laptop"
+                    EA["🖥️ Electron App<br/>(Kiosk Mode)<br/>Monaco Editor"]
+                end
+
+                subgraph "🤖 External API"
+                    GEM["✨ Google Gemini API<br/>AI Grading + Chatbot"]
+                end
+
+                WP <-- "REST API<br/>(HTTPS)" --> NG
+                EA <-- "REST + WebSocket<br/>(HTTPS/WSS)" --> NG
+                NG <--> BE
+                BE <--> PG
+                BE <--> MG
+                BE --> COMP
+                BE <-- "Prompts & Responses" --> GEM
+        </div>
+    </div>
+</section>
+
+<!-- ==================== 6. DEPLOYMENT FLOW ==================== -->
+<section id="deployment">
+    <h2 class="section-title">🌍 6. Deployment & Infrastructure Flow</h2>
+    <p class="section-subtitle">How the system is deployed, hosted, and connected end-to-end.</p>
+    <div class="diagram-wrap">
+        <div class="mermaid">
+            graph LR
+                subgraph "Developer Machine"
+                    DEV["👨‍💻 Developer<br/>D:\Code Gurukul"]
+                    DEV -->|git push| GH["🐙 GitHub<br/>bevegan-all/Code-Gurukul"]
+                end
+
+                subgraph "Auto-Deploy"
+                    GH -->|"Vercel auto-deploys<br/>frontend/ folder"| VER["☁️ Vercel<br/>code-gurukul.vercel.app"]
+                end
+
+                subgraph "School PC Setup"
+                    BAT["📜 server_start.bat"] -->|Step 1| PGS["Start PostgreSQL"]
+                    BAT -->|Step 2| MGS["Start MongoDB"]
+                    BAT -->|Step 3| NGS["Start ngrok tunnel"]
+                    BAT -->|Step 4| FETCH["Fetch ngrok public URL"]
+                    BAT -->|Step 5| KILL["Kill port 5000 conflicts"]
+                    BAT -->|Step 6| START["node server.js on :5000"]
+                end
+
+                subgraph "Student PCs"
+                    USB["📁 Copy folder via USB"] --> LAUNCH["launch.bat"]
+                    LAUNCH --> EAPP["Electron App connects<br/>to ngrok URL"]
+                end
+
+                VER -->|"API calls to<br/>ngrok URL"| NGS
+                EAPP -->|"API + WebSocket<br/>to ngrok URL"| NGS
+        </div>
+    </div>
+
+    <div class="highlight-box">
+        <p><strong>How it works:</strong> The teacher runs <code>server_start.bat</code> on the school PC. This auto-starts PostgreSQL, MongoDB, establishes an ngrok tunnel, and boots the Node.js server. The Vercel-hosted web portal and all student Electron apps connect to the backend through the ngrok public URL. Students only need the portable folder (copied via USB) and an internet connection.</p>
+    </div>
+</section>
+
+<!-- ==================== 7. USE CASE ==================== -->
+<section id="usecase">
+    <h2 class="section-title">👥 7. Use Case Diagram</h2>
+    <p class="section-subtitle">Actors and their interactions with the system.</p>
+    <div class="diagram-wrap">
+        <div class="mermaid">
+            flowchart TB
+                Admin(["🔑 Admin"])
+                Teacher(["👩‍🏫 Teacher"])
+                Student(["🧑‍🎓 Student"])
+                System(["⚙️ System"])
+
+                Admin --> A1["Create Teachers & Students"]
+                Admin --> A2["Manage Departments"]
+                Admin --> A3["Manage Courses & Classes"]
+                Admin --> A4["Assign Subjects to Teachers"]
+                Admin --> A5["View System Leaderboard"]
+
+                Teacher --> T1["Create Lab Assignments<br/>(with Sets & Questions)"]
+                Teacher --> T2["Create MCQ Quizzes"]
+                Teacher --> T3["Publish Notes (HTML)"]
+                Teacher --> T4["Live Monitor Students"]
+                Teacher --> T5["View Student Screens"]
+                Teacher --> T6["Review AI Grades"]
+                Teacher --> T7["View Subject Leaderboard"]
+
+                Student --> S1["Login via Secure App"]
+                Student --> S2["View & Attempt Assignments"]
+                Student --> S3["Write & Compile Code (IDE)"]
+                Student --> S4["Submit Code for AI Grading"]
+                Student --> S5["Take Timed Quizzes"]
+                Student --> S6["Read Teacher Notes"]
+                Student --> S7["Ask Gemini Guru AI"]
+                Student --> S8["Free Sandbox Coding"]
+                Student --> S9["View Leaderboard"]
+
+                System --> SY1["Send Welcome Emails"]
+                System --> SY2["OTP Password Reset"]
+                System --> SY3["AI Grade via Gemini"]
+                System --> SY4["WebSocket Live Tracking"]
+                System --> SY5["Screen Stream Capture"]
+        </div>
+    </div>
+</section>
+
+<!-- ==================== 8. ASSIGNMENT GRADING SEQUENCE ==================== -->
+<section id="sequence">
+    <h2 class="section-title">📝 8. Assignment & Grading Sequence Flow</h2>
+    <p class="section-subtitle">Step-by-step interaction when a student completes and submits an assignment.</p>
+    <div class="diagram-wrap">
+        <div class="mermaid">
+            sequenceDiagram
+                actor T as 👩‍🏫 Teacher (Web Portal)
+                participant BE as ⚙️ Backend Server
+                participant DB as 🐘 PostgreSQL
+                actor S as 🧑‍🎓 Student (Windows App)
+                participant C as 🔧 Local Compiler
+                participant G as ✨ Google Gemini
+
+                T->>BE: POST /api/teacher/assignment (Create Assignment with Sets & Questions)
+                BE->>DB: INSERT LabAssignment, AssignmentSet, AssignmentQuestion
+                DB-->>BE: Assignment Created (ID returned)
+                BE-->>T: ✅ Assignment Published
+
+                Note over S: Student opens Lab Workspace
+                S->>BE: GET /api/student/assignment/:id
+                BE->>DB: SELECT assignment + questions
+                DB-->>BE: Assignment Data
+                BE-->>S: Problem Statement + Expected Format
+
+                Note over S: Student writes code in Monaco Editor
+                S->>BE: POST /api/compiler/run (code, language, socketId)
+                BE->>C: spawn(gcc/python/node) with student code
+                C-->>BE: stdout/stderr streamed
+                BE-->>S: WebSocket emit code:output (live terminal)
+
+                Note over S: Student clicks Submit
+                S->>BE: POST /api/student/assignment/submit (code)
+                BE->>G: Prompt: Teacher code + Student code + Rubric
+                G-->>BE: JSON response with marks (0-10) + reason
+                BE->>DB: INSERT StudentAssignmentSubmission (code, ai_marks, chatbot_usage)
+                DB-->>BE: Saved
+                BE-->>S: ✅ Score: 8/10 — "Logic correct, minor edge case missed"
+
+                Note over T: Teacher reviews on dashboard
+                T->>BE: GET /api/teacher/submissions
+                BE->>DB: SELECT submissions with AI grades
+                DB-->>BE: Submissions list
+                BE-->>T: Display grades with option to override
+        </div>
+    </div>
+</section>
+
+<!-- ==================== 9. MONITORING FLOW ==================== -->
+<section id="monitoring">
+    <h2 class="section-title">📡 9. Real-Time Monitoring Flow</h2>
+    <p class="section-subtitle">How the teacher sees live student activity and screen streams.</p>
+    <div class="diagram-wrap">
+        <div class="mermaid">
+            sequenceDiagram
+                actor S as 🧑‍🎓 Student App
+                participant SIO as 🔌 Socket.IO Server
+                actor T as 👩‍🏫 Teacher Portal
+
+                Note over T: Teacher opens Monitor page
+                T->>SIO: emit("join_teacher_monitor", classId)
+                SIO-->>T: Joined room teacher_{classId}
+
+                Note over S: Student logs in
+                S->>SIO: emit("student:online", {studentId, name, rollNo, classId})
+                SIO->>SIO: Map student socket ID
+                SIO-->>T: emit("student:activity", {name, status: Online})
+
+                loop Every 10 seconds
+                    S->>SIO: emit("student:ping", {studentId, classId})
+                    SIO-->>T: emit("student:activity", {status: Active})
+                end
+
+                Note over T: Teacher clicks "Watch Screen"
+                T->>SIO: emit("teacher:start_watching", {studentId})
+                SIO-->>S: emit("teacher:start_watching")
+
+                loop Every 3 seconds
+                    S->>S: html2canvas captures screenshot
+                    S->>SIO: emit("student:screen_stream", {base64, studentId, classId})
+                    SIO-->>T: emit("student:screen_stream", {base64})
+                    Note over T: Teacher sees live screen image
+                end
+
+                T->>SIO: emit("teacher:stop_watching", {studentId})
+                SIO-->>S: emit("teacher:stop_watching")
+                Note over S: Screenshot loop stops
+        </div>
+    </div>
+</section>
+
+<!-- ==================== 10. COMPILER FLOW ==================== -->
+<section id="compiler">
+    <h2 class="section-title">⚡ 10. Secure Compilation Engine Flow</h2>
+    <p class="section-subtitle">How student code is safely compiled and executed on the server.</p>
+    <div class="diagram-wrap">
+        <div class="mermaid">
+            flowchart TD
+                A["Student writes code<br/>in Monaco Editor"] --> B["Clicks RUN ▶️"]
+                B --> C["POST /api/compiler/run<br/>{code, language, socketId}"]
+                C --> D{"Language?"}
+                D -->|"C / C++"| E["Write to temp sandbox<br/>Inject setvbuf for<br/>unbuffered output"]
+                D -->|"Java"| F["Write Main.java<br/>to temp sandbox"]
+                D -->|"Python / Node.js"| G["Write source file<br/>to temp sandbox"]
+
+                E --> H{"Needs compile?"}
+                F --> H
+                G --> I["spawn(python/node)"]
+
+                H -->|Yes| J["spawn(gcc/javac) to compile"]
+                J --> K{"Compile OK?"}
+                K -->|Error| L["WebSocket: Send<br/>compile error to student"]
+                K -->|Success| I2["spawn(./a.exe or java Main)"]
+
+                I --> M["stdout/stderr → WebSocket<br/>emit code:output"]
+                I2 --> M
+
+                M --> N{"Needs stdin input?"}
+                N -->|Yes| O["Student types input<br/>→ WebSocket code:input<br/>→ process.stdin.write"]
+                O --> M
+                N -->|No| P["Process exits"]
+                P --> Q["WebSocket: emit code:done<br/>Cleanup temp files<br/>(60s timeout safety)"]
+        </div>
+    </div>
+</section>
+
+<!-- ==================== 11. ER DIAGRAM ==================== -->
+<section id="er">
+    <h2 class="section-title">🗄️ 11. Entity-Relationship (ER) Diagram</h2>
+    <p class="section-subtitle">Complete database relationships across all PostgreSQL models.</p>
+    <div class="diagram-wrap">
+        <div class="mermaid">
+            erDiagram
+                User ||--o{ StudentProfile : "has one"
+                User ||--o{ TeacherSubject : "teaches"
+                User ||--o{ LabAssignment : "creates"
+                User ||--o{ Quiz : "creates"
+                User ||--o{ OTPRequest : "requests"
+                User ||--o{ ActivityLog : "logs"
+                User ||--o{ StudentAssignmentSubmission : "submits"
+                User ||--o{ StudentQuizSubmission : "takes"
+                User ||--o{ LeaderboardEntry : "ranks"
+                User ||--o{ PracticeSubmission : "practices"
+
+                Department ||--o{ Course : "contains"
+                Course ||--o{ Class : "has"
+                Course ||--o{ Subject : "offers"
+
+                Class ||--o{ StudentProfile : "enrolls"
+                Class ||--o{ TeacherSubject : "assigned"
+                Class ||--o{ LabAssignment : "targeted"
+                Class ||--o{ Quiz : "targeted"
+
+                Subject ||--o{ TeacherSubject : "mapped"
+                Subject ||--o{ LabAssignment : "for"
+                Subject ||--o{ Quiz : "for"
+                Subject ||--o{ LeaderboardEntry : "scored"
+                Subject ||--o{ StudentSubject : "enrolled"
+
+                StudentProfile ||--o{ StudentSubject : "takes"
+
+                LabAssignment ||--o{ AssignmentSet : "contains"
+                AssignmentSet ||--o{ AssignmentQuestion : "has"
+                AssignmentQuestion ||--o{ StudentAssignmentSubmission : "answered"
+
+                Quiz ||--o{ QuizQuestion : "contains"
+                QuizQuestion ||--o{ QuizOption : "has"
+                Quiz ||--o{ StudentQuizSubmission : "answered"
+
+                PracticeQuestion ||--o{ PracticeSubmission : "answered"
+                LabAssignment ||--o{ LeaderboardEntry : "scored"
+                Quiz ||--o{ LeaderboardEntry : "scored"
+        </div>
+    </div>
+</section>
+
+<!-- ==================== 12. UML CLASS DIAGRAM ==================== -->
+<section id="uml">
+    <h2 class="section-title">📐 12. UML Class Diagram</h2>
+    <p class="section-subtitle">Object structure of core PostgreSQL models.</p>
+    <div class="diagram-wrap">
+        <div class="mermaid">
+            classDiagram
+                class User {
+                    +int id
+                    +String name
+                    +String email
+                    +String password_hash
+                    +Enum role [admin, teacher, student]
+                    +Boolean is_blind
+                    +Boolean is_active
+                }
+                class Department {
+                    +int id
+                    +String name
+                    +int created_by
+                }
+                class Course {
+                    +int id
+                    +String name
+                    +int department_id
+                }
+                class Class {
+                    +int id
+                    +String name
+                    +int course_id
+                }
+                class Subject {
+                    +int id
+                    +String name
+                    +Enum type [major, minor]
+                    +int course_id
+                }
+                class StudentProfile {
+                    +int id
+                    +int user_id
+                    +int class_id
+                    +String roll_no
+                    +String parent_email
+                    +int minor_subject_id
+                }
+                class LabAssignment {
+                    +int id
+                    +String title
+                    +Text description
+                    +String compiler_required
+                    +int time_limit_minutes
+                    +Enum status [draft, published]
+                    +int teacher_id
+                    +int subject_id
+                    +int class_id
+                }
+                class AssignmentQuestion {
+                    +int id
+                    +Text question_text
+                    +Text expected_code
+                    +int order_index
+                    +int set_id
+                }
+                class StudentAssignmentSubmission {
+                    +int id
+                    +Text submitted_code
+                    +Decimal ai_marks
+                    +int chatbot_usage_count
+                    +int time_taken_seconds
+                    +int student_id
+                    +int question_id
+                }
+                class Quiz {
+                    +int id
+                    +String title
+                    +int time_limit_minutes
+                    +Enum status [draft, published]
+                    +int teacher_id
+                    +int subject_id
+                    +int class_id
+                }
+                class QuizQuestion {
+                    +int id
+                    +Text question_text
+                    +Enum question_type [single, multiple]
+                    +int order_index
+                    +int quiz_id
+                }
+                class LeaderboardEntry {
+                    +int id
+                    +Decimal marks
+                    +Decimal percentage
+                    +int rank
+                    +int student_id
+                    +int subject_id
+                }
+
+                User "1" --> "*" StudentProfile
+                User "1" --> "*" LabAssignment
+                User "1" --> "*" Quiz
+                Department "1" --> "*" Course
+                Course "1" --> "*" Class
+                Course "1" --> "*" Subject
+                Class "1" --> "*" StudentProfile
+                Subject "1" --> "*" LabAssignment
+                LabAssignment "1" --> "*" AssignmentQuestion
+                AssignmentQuestion "1" --> "*" StudentAssignmentSubmission
+                Quiz "1" --> "*" QuizQuestion
+                User "1" --> "*" LeaderboardEntry
+        </div>
+    </div>
+</section>
+
+<!-- ==================== 13. API ROUTES ==================== -->
+<section id="api">
+    <h2 class="section-title">🔌 13. API Route Map</h2>
+    <p class="section-subtitle">All backend REST API endpoints organized by module.</p>
+    <div class="card" style="overflow-x: auto;">
+        <table class="data-table">
+            <thead>
+                <tr><th>Module</th><th>Base Path</th><th>Key Endpoints</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><strong>Auth</strong></td><td><code>/api/auth</code></td><td>POST /login, POST /register, POST /forgot-password, POST /verify-otp, POST /reset-password, POST /refresh-token</td></tr>
+                <tr><td><strong>Admin</strong></td><td><code>/api/admin</code></td><td>CRUD for users, departments, courses, classes, subjects, teacher-subject assignments, student profiles</td></tr>
+                <tr><td><strong>Teacher</strong></td><td><code>/api/teacher</code></td><td>CRUD for assignments (with sets/questions), quizzes (with questions/options), notes, view submissions, subject-detail analytics</td></tr>
+                <tr><td><strong>Student</strong></td><td><code>/api/student</code></td><td>GET subjects, assignments, quizzes, notes; POST submissions, quiz answers; chatbot sessions</td></tr>
+                <tr><td><strong>Compiler</strong></td><td><code>/api/compiler</code></td><td>POST /run — sends code to sandbox, streams output via WebSocket</td></tr>
+                <tr><td><strong>Chatbot</strong></td><td><code>/api/chatbot</code></td><td>POST /chat — sends prompt + context to Gemini, returns AI response</td></tr>
+                <tr><td><strong>Practice</strong></td><td><code>/api/practice</code></td><td>GET questions, POST submissions with AI grading</td></tr>
+                <tr><td><strong>Leaderboard</strong></td><td><code>/api/leaderboard</code></td><td>GET rankings by subject, class, or overall</td></tr>
+                <tr><td><strong>Health</strong></td><td><code>/api/health</code></td><td>GET — returns server status and current time</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- ==================== 14. DB SCHEMA ==================== -->
+<section id="db">
+    <h2 class="section-title">💾 14. Database Schema Overview</h2>
+    <p class="section-subtitle">What is stored where, across both databases.</p>
+    <div class="grid-2">
+        <div class="card">
+            <h3>🐘 PostgreSQL (21 Tables — Relational Data)</h3>
+            <table class="data-table" style="font-size: 0.82rem;">
+                <thead><tr><th>Table</th><th>Purpose</th></tr></thead>
+                <tbody>
+                    <tr><td><code>Users</code></td><td>All admins, teachers, students</td></tr>
+                    <tr><td><code>Departments</code></td><td>Academic departments</td></tr>
+                    <tr><td><code>Courses</code></td><td>Courses under departments</td></tr>
+                    <tr><td><code>Classes</code></td><td>Divisions within courses</td></tr>
+                    <tr><td><code>Subjects</code></td><td>Major/minor subjects</td></tr>
+                    <tr><td><code>TeacherSubjects</code></td><td>Teacher-to-subject mapping</td></tr>
+                    <tr><td><code>StudentProfiles</code></td><td>Roll no, class, minor subject</td></tr>
+                    <tr><td><code>StudentSubjects</code></td><td>Student enrollment in subjects</td></tr>
+                    <tr><td><code>LabAssignments</code></td><td>Assignment configs</td></tr>
+                    <tr><td><code>AssignmentSets</code></td><td>Question sets per assignment</td></tr>
+                    <tr><td><code>AssignmentQuestions</code></td><td>Individual questions</td></tr>
+                    <tr><td><code>Quizzes</code></td><td>Quiz configs</td></tr>
+                    <tr><td><code>QuizQuestions</code></td><td>MCQ questions</td></tr>
+                    <tr><td><code>QuizOptions</code></td><td>Answer options</td></tr>
+                    <tr><td><code>StudentAssignmentSubmissions</code></td><td>Code + AI grade</td></tr>
+                    <tr><td><code>StudentQuizSubmissions</code></td><td>Quiz answers + score</td></tr>
+                    <tr><td><code>LeaderboardEntries</code></td><td>Ranked scores</td></tr>
+                    <tr><td><code>PracticeQuestions</code></td><td>Practice problems</td></tr>
+                    <tr><td><code>PracticeSubmissions</code></td><td>Practice code + AI grade</td></tr>
+                    <tr><td><code>OTPRequests</code></td><td>Password reset OTPs</td></tr>
+                    <tr><td><code>ActivityLogs</code></td><td>User action audit trail</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="card">
+            <h3>🍃 MongoDB (5 Collections — Flexible Documents)</h3>
+            <table class="data-table" style="font-size: 0.82rem;">
+                <thead><tr><th>Collection</th><th>Purpose</th></tr></thead>
+                <tbody>
+                    <tr><td><code>notes</code></td><td>Teacher-published rich HTML notes per subject/class</td></tr>
+                    <tr><td><code>chatbotsessions</code></td><td>Full message history between student and Gemini Guru AI</td></tr>
+                    <tr><td><code>studentreports</code></td><td>AI-generated performance summary reports</td></tr>
+                    <tr><td><code>notifications</code></td><td>System notifications per user</td></tr>
+                    <tr><td><code>idlealerts</code></td><td>Tracks when teacher detects a student idle</td></tr>
+                </tbody>
+            </table>
+            <br>
+            <h3 style="margin-top: 1rem;">📊 Why Two Databases?</h3>
+            <p style="font-size: 0.88rem; color: #475569; margin-top: 0.5rem;">
+                <strong>PostgreSQL</strong> is used for structured, relational data that requires ACID transactions, foreign key constraints, and complex JOINs (users, grades, assignments, class hierarchies).<br><br>
+                <strong>MongoDB</strong> is used for flexible, document-oriented data where the schema can vary (rich HTML notes, variable-length chatbot conversations, nested message arrays).
+            </p>
+        </div>
+    </div>
+</section>
+
+<!-- ==================== 15. ROLES ==================== -->
+<section id="roles">
+    <h2 class="section-title">🔐 15. User Roles & Permissions</h2>
+    <p class="section-subtitle">Access control matrix across the platform.</p>
+    <div class="card" style="overflow-x: auto;">
+        <table class="data-table">
+            <thead>
+                <tr><th>Action</th><th>Admin</th><th>Teacher</th><th>Student</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Create/Delete Users</td><td>✅</td><td>❌</td><td>❌</td></tr>
+                <tr><td>Manage Departments, Courses, Classes</td><td>✅</td><td>❌</td><td>❌</td></tr>
+                <tr><td>Assign Teachers to Subjects</td><td>✅</td><td>❌</td><td>❌</td></tr>
+                <tr><td>Create Assignments & Quizzes</td><td>❌</td><td>✅</td><td>❌</td></tr>
+                <tr><td>Publish Notes</td><td>❌</td><td>✅</td><td>❌</td></tr>
+                <tr><td>Live Monitor Students</td><td>❌</td><td>✅</td><td>❌</td></tr>
+                <tr><td>View/Stream Student Screens</td><td>❌</td><td>✅</td><td>❌</td></tr>
+                <tr><td>Review & Override AI Grades</td><td>❌</td><td>✅</td><td>❌</td></tr>
+                <tr><td>Write & Compile Code (IDE)</td><td>❌</td><td>❌</td><td>✅</td></tr>
+                <tr><td>Submit Assignments</td><td>❌</td><td>❌</td><td>✅</td></tr>
+                <tr><td>Take Quizzes</td><td>❌</td><td>❌</td><td>✅</td></tr>
+                <tr><td>Use AI Tutor (Gemini Guru)</td><td>❌</td><td>❌</td><td>✅</td></tr>
+                <tr><td>View Leaderboard</td><td>✅</td><td>✅</td><td>✅</td></tr>
+                <tr><td>Forgot Password (OTP)</td><td>✅</td><td>✅</td><td>✅</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- ==================== 16. SCREENS ==================== -->
+<section id="screens">
+    <h2 class="section-title">📱 16. Screen Inventory</h2>
+    <p class="section-subtitle">All pages/screens across both platforms.</p>
+    <div class="grid-2">
+        <div class="card">
+            <h3>🌐 Web Portal (code-gurukul.vercel.app)</h3>
+            <ul class="feature-list" style="font-size: 0.9rem;">
+                <li><strong>/login</strong> — Unified login for all roles</li>
+                <li><strong>/forgot-password</strong> — 6-digit OTP-based password reset</li>
+                <li><strong>/admin/</strong> — Admin Dashboard Home (stats overview)</li>
+                <li><strong>/admin/teachers</strong> — Manage Teachers (CRUD + email)</li>
+                <li><strong>/admin/students</strong> — Manage Students (CRUD + email + roll no)</li>
+                <li><strong>/admin/departments</strong> — Manage Departments</li>
+                <li><strong>/admin/courses</strong> — Manage Courses</li>
+                <li><strong>/admin/classes</strong> — Manage Classes</li>
+                <li><strong>/admin/subjects</strong> — Manage Subjects (major/minor)</li>
+                <li><strong>/admin/leaderboard</strong> — System-wide leaderboard</li>
+                <li><strong>/teacher/</strong> — Teacher Dashboard Home</li>
+                <li><strong>/teacher/classes</strong> — My Classes</li>
+                <li><strong>/teacher/subjects</strong> — My Subjects</li>
+                <li><strong>/teacher/subject/:id</strong> — Subject Detail (assignments, quizzes, notes, submissions)</li>
+                <li><strong>/teacher/monitor</strong> — Live Student Monitor with screen streaming</li>
+                <li><strong>/teacher/leaderboard</strong> — Subject leaderboard</li>
+                <li><strong>/student/</strong> — Student Dashboard Home</li>
+                <li><strong>/student/subjects</strong> — My Subjects</li>
+                <li><strong>/student/subject/:id</strong> — Subject Detail</li>
+                <li><strong>/student/assignments</strong> — My Assignments</li>
+                <li><strong>/student/notes, /student/notes/:id</strong> — Notes viewer</li>
+                <li><strong>/student/leaderboard</strong> — Personal rankings</li>
+            </ul>
+        </div>
+        <div class="card">
+            <h3>🖥️ Windows App (Electron Kiosk)</h3>
+            <ul class="feature-list" style="font-size: 0.9rem;">
+                <li><strong>/</strong> — Login (kiosk fullscreen)</li>
+                <li><strong>/app/home</strong> — Student Home (dashboard cards)</li>
+                <li><strong>/app/assignments</strong> — View Assigned Lab Assignments</li>
+                <li><strong>/app/learn</strong> — Learn Mode (concept tutorials)</li>
+                <li><strong>/app/learn/:id</strong> — Learn Mode Detail</li>
+                <li><strong>/app/notes</strong> — Teacher Notes list</li>
+                <li><strong>/app/notes/:id</strong> — Note Detail (HTML renderer)</li>
+                <li><strong>/app/quizzes</strong> — Available Quizzes</li>
+                <li><strong>/app/sandbox</strong> — Free Sandbox IDE</li>
+                <li><strong>/app/leaderboard</strong> — Class Leaderboard</li>
+                <li><strong>/lab/:id</strong> — Lab Workspace (fullscreen Monaco IDE with compiler, AI grading, Gemini Guru)</li>
+                <li><strong>/quiz/:id</strong> — Quiz Taker (fullscreen, timed, auto-submit)</li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<!-- ==================== 17. SECURITY ==================== -->
+<section id="security">
+    <h2 class="section-title">🛡️ 17. Security Measures</h2>
+    <p class="section-subtitle">How CodeGurukul ensures a secure, controlled environment.</p>
+    <div class="grid-3">
+        <div class="card">
+            <div class="icon-badge red">🔒</div>
+            <h3>Kiosk Lockdown</h3>
+            <p>Electron app runs in fullscreen kiosk mode. Blocks <code>Alt+Tab</code>, <code>Ctrl+Esc</code>, <code>Ctrl+Shift+Esc</code> (Task Manager), and <code>Alt+F4</code>. The app is always-on-top and frameless.</p>
+        </div>
+        <div class="card">
+            <div class="icon-badge blue">🔑</div>
+            <h3>JWT Authentication</h3>
+            <p>All API routes are protected by JWT tokens. Tokens include role-based claims. Middleware validates tokens and enforces role guards (admin, teacher, student).</p>
+        </div>
+        <div class="card">
+            <div class="icon-badge green">🔐</div>
+            <h3>Secrets Management</h3>
+            <p>All sensitive keys (DB credentials, JWT secret, Gemini API keys, email passwords) are stored in <code>.env</code> files which are <code>.gitignore</code>-d. Only <code>.env.example</code> templates are committed to GitHub.</p>
+        </div>
+        <div class="card">
+            <div class="icon-badge amber">🧹</div>
+            <h3>Sandboxed Compilation</h3>
+            <p>Student code is written to isolated <code>/tmp/codegurukul_compiler/{uuid}/</code> directories. Each execution gets its own sandbox. Files are cleaned up after execution. A 60-second timeout kills runaway processes.</p>
+        </div>
+        <div class="card">
+            <div class="icon-badge purple">🔗</div>
+            <h3>CORS & Helmet</h3>
+            <p>Backend uses <code>Helmet.js</code> for HTTP security headers and <code>CORS</code> configured to allow cross-origin requests from the Vercel frontend and Electron app via ngrok.</p>
+        </div>
+        <div class="card">
+            <div class="icon-badge cyan">📧</div>
+            <h3>OTP Verification</h3>
+            <p>Password resets require a 6-digit OTP sent via email (Nodemailer + Gmail SMTP). OTP codes expire after 10 minutes and are single-use.</p>
+        </div>
+    </div>
+</section>
+
+</main>
+
+<footer>
+    <div class="container">
+        <p style="font-size: 1rem; color: #e2e8f0; margin-bottom: 0.5rem;">🎓 CodeGurukul</p>
+        <p>&copy; 2026. Built with Node.js, React, Electron, PostgreSQL, MongoDB & Google Gemini AI.</p>
+        <p style="margin-top: 0.25rem;">GitHub: <a href="https://github.com/bevegan-all/Code-Gurukul" style="color: #60a5fa;">bevegan-all/Code-Gurukul</a> &nbsp;|&nbsp; Web: <a href="https://code-gurukul.vercel.app" style="color: #60a5fa;">code-gurukul.vercel.app</a></p>
+    </div>
+</footer>
+
+</body>
+</html>

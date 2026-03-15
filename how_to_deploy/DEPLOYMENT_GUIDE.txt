@@ -1,0 +1,326 @@
+
+================================================================================
+        CODEGURUKUL — COMPLETE DEPLOYMENT GUIDE (NEW MACHINE)
+================================================================================
+  Read this file top to bottom. Follow each step exactly in order.
+  All .bat files referenced are in this same folder (how_to_deploy/).
+================================================================================
+
+PROJECT STRUCTURE OVERVIEW
+────────────────────────────────────────────────────────────────────────────────
+  Code Gurukul/
+  ├── backend/           → Node.js + Express REST API & Socket.IO server
+  ├── frontend/          → React web app (for Admin & Teacher dashboards)
+  ├── windows-app/       → Electron kiosk app (for Students)
+  ├── how_to_deploy/     → YOU ARE HERE
+  ├── server_start.bat   → Starts PostgreSQL + MongoDB + ngrok + backend
+  ├── ngrok.exe          → ngrok binary (tunnels local port to internet)
+  └── install_compilers.bat → Installs Go, R (for code execution)
+
+SYSTEM ARCHITECTURE
+────────────────────────────────────────────────────────────────────────────────
+  [Student PC]  →  Electron App  →  ngrok URL  →  [Server PC]
+  [Teacher/Admin Browser]  →  Vercel (frontend)  →  ngrok URL  →  [Server PC]
+  [Server PC]  →  Node.js (port 5000) + PostgreSQL (port 5432) + MongoDB (27017)
+
+  NOTE: The backend MUST be running on a server PC with ngrok tunneling it.
+        The frontend is hosted on Vercel (free). The Electron app is distributed
+        to student PCs. Every time ngrok restarts, the URL CHANGES — you must
+        run update_ngrok_url.bat to push the new URL everywhere.
+
+================================================================================
+  PHASE 1 — INSTALL PREREQUISITES ON SERVER MACHINE
+================================================================================
+
+STEP 1.1 — Install Node.js (v18 or v20 LTS)
+────────────────────────────────────────────────────────────────────────────────
+  1. Go to: https://nodejs.org/en/download
+  2. Download "Windows Installer (.msi)" — LTS version
+  3. Run the installer, click Next → Next → Install (keep all defaults)
+  4. After install, open CMD and verify:
+       node --version    (should show v18.x.x or v20.x.x)
+       npm --version     (should show 9.x.x or higher)
+
+STEP 1.2 — Install PostgreSQL 15
+────────────────────────────────────────────────────────────────────────────────
+  1. Go to: https://www.enterprisedb.com/downloads/postgres-postgresql-downloads
+  2. Download PostgreSQL 15 for Windows x86-64
+  3. Run the installer:
+       - Installation Directory: Keep default (C:\Program Files\PostgreSQL\15)
+       - Components: Keep all selected (PostgreSQL Server, pgAdmin, Stack Builder)
+       - Data Directory: Keep default
+       - Password: SET THIS TO → postgres
+         ⚠️  IMPORTANT: Must be exactly "postgres" to match backend/.env
+       - Port: Keep 5432
+       - Locale: Keep default
+  4. Finish installation. PostgreSQL service starts automatically.
+  5. Verify: Open CMD → psql -U postgres -W
+       (enter password: postgres)
+       You should see the psql prompt. Type \q to exit.
+
+STEP 1.3 — Install MongoDB Community Server
+────────────────────────────────────────────────────────────────────────────────
+  1. Go to: https://www.mongodb.com/try/download/community
+  2. Select: Version 7.0+, Platform: Windows, Package: msi
+  3. Run the installer:
+       - Choose "Complete" setup
+       - ✅ Check "Install MongoDB as a Service" (IMPORTANT!)
+       - Service Name: MongoDB
+       - Keep all other defaults
+  4. Finish installation. MongoDB service starts automatically.
+  5. Verify: Open CMD → mongosh
+       You should see the MongoDB shell. Type exit to quit.
+
+STEP 1.4 — Install Git
+────────────────────────────────────────────────────────────────────────────────
+  1. Go to: https://git-scm.com/download/win
+  2. Download and run the installer (keep all defaults)
+  3. Verify: git --version
+
+STEP 1.5 — Install ngrok
+────────────────────────────────────────────────────────────────────────────────
+  The ngrok.exe is already included in the Code Gurukul/ root folder.
+  You just need to authenticate it with your account:
+
+  1. Sign up for free at: https://ngrok.com/signup
+  2. After login, go to: https://dashboard.ngrok.com/get-started/your-authtoken
+  3. Copy your authtoken (looks like: 2abc...xyz)
+  4. Open CMD in the Code Gurukul/ folder and run:
+       ngrok config add-authtoken YOUR_AUTHTOKEN_HERE
+  5. Verify: ngrok.exe http 5000
+       (should show a Forwarding URL like https://abc-123.ngrok-free.app)
+       Press Ctrl+C to stop for now.
+
+  ⚠️  FREE NGROK: The URL changes EVERY TIME you restart ngrok.
+      After getting a new URL, always run: update_ngrok_url.bat
+
+================================================================================
+  PHASE 2 — SET UP THE PROJECT
+================================================================================
+
+STEP 2.1 — Clone or Copy the Project
+────────────────────────────────────────────────────────────────────────────────
+  Option A — Clone from GitHub (after you've pushed it there):
+    git clone https://github.com/YOUR_USERNAME/code-gurukul.git "d:\Code Gurukul"
+
+  Option B — Copy the folder manually from USB/network drive to D:\Code Gurukul
+
+STEP 2.2 — Create Databases
+────────────────────────────────────────────────────────────────────────────────
+  Run the batch file:  how_to_deploy/1_create_databases.bat
+  
+  This script:
+    - Creates the PostgreSQL database "codegurukul"
+    - Creates the MongoDB database "codegurukul" (done automatically on first use)
+    - Runs the initial seed (creates admin user, default data)
+
+STEP 2.3 — Configure Environment Variables
+────────────────────────────────────────────────────────────────────────────────
+  The backend uses a .env file at: backend/.env
+  
+  If it doesn't exist, run:  how_to_deploy/2_setup_env.bat
+  
+  Key values to verify/update:
+    PG_HOST=localhost
+    PG_PORT=5432
+    PG_USER=postgres
+    PG_PASSWORD=postgres       ← must match what you set in Step 1.2
+    PG_DATABASE=codegurukul
+    MONGO_URI=mongodb://localhost:27017/codegurukul
+    PORT=5000
+    JWT_SECRET=                ← change to something random for production
+    GEMINI_KEY_1=              ← get from Google AI Studio (ai.google.dev)
+    EMAIL_USER=                ← your Gmail address for sending emails
+    EMAIL_PASS=                ← Gmail App Password (not your normal password)
+    ADMIN_EMAIL=admin@codegurukul.dev
+    ADMIN_PASSWORD=admin
+
+STEP 2.4 — Install Node Dependencies
+────────────────────────────────────────────────────────────────────────────────
+  Run:  how_to_deploy/3_install_dependencies.bat
+  
+  This installs npm packages for: backend, frontend, windows-app
+
+================================================================================
+  PHASE 3 — START THE SERVER
+================================================================================
+
+STEP 3.1 — Start the Full Server Stack
+────────────────────────────────────────────────────────────────────────────────
+  Run from Code Gurukul/ folder:  server_start.bat
+  
+  This starts (in order):
+    1. PostgreSQL service
+    2. MongoDB service
+    3. ngrok tunnel on port 5000
+    4. Reads the new ngrok URL
+    5. Kills anything on port 5000
+    6. Starts Node.js backend server
+
+STEP 3.2 — Get and Apply ngrok URL
+────────────────────────────────────────────────────────────────────────────────
+  After server_start.bat runs, check the ngrok dashboard:
+    http://127.0.0.1:4040   (ngrok local dashboard)
+    
+  You will see a URL like:  https://abc-xyz-123.ngrok-free.app
+  
+  IMPORTANT: Copy this URL and run:  how_to_deploy/4_update_ngrok_url.bat
+  
+  Paste the URL when prompted. This updates:
+    - windows-app/src/config.js       (Student Electron app)
+    - backend/config/tunnel_url.json  (Backend config)
+    - frontend/.env.local             (Frontend Vite env, for local testing)
+
+================================================================================
+  PHASE 4 — TEST LOCALLY
+================================================================================
+
+STEP 4.1 — Test the Backend API
+────────────────────────────────────────────────────────────────────────────────
+  Open browser → go to: http://localhost:5000/api/health
+  Expected response: {"status":"ok","time":"..."}
+  
+  Also test via ngrok: https://YOUR-NGROK-URL/api/health
+
+STEP 4.2 — Test the Frontend (Teacher/Admin Dashboard)
+────────────────────────────────────────────────────────────────────────────────
+  Open CMD in: Code Gurukul/frontend/
+  Run: npm run dev
+  Open browser → http://localhost:5173
+  
+  Login with: admin@codegurukul.dev / admin
+  Verify the dashboard loads and data appears.
+
+STEP 4.3 — Test the Windows (Student) App
+────────────────────────────────────────────────────────────────────────────────
+  Run:  how_to_deploy/5_test_windows_app.bat
+  
+  OR manually:
+    Open CMD in: Code Gurukul/windows-app/
+    Run: npm run dev
+  
+  The Electron app will open in kiosk mode.
+  Login with a student account.
+
+================================================================================
+  PHASE 5 — DEPLOY FRONTEND TO GITHUB + VERCEL
+================================================================================
+
+STEP 5.1 — Push Entire Project to GitHub
+────────────────────────────────────────────────────────────────────────────────
+  Run:  how_to_deploy/6_push_to_github.bat
+  
+  This will:
+    1. Stage all changes
+    2. Commit with a timestamped message
+    3. Push to origin/main
+  
+  FIRST TIME ONLY — set up the remote:
+    git remote add origin https://github.com/YOUR_USERNAME/code-gurukul.git
+    git branch -M main
+    git push -u origin main
+
+STEP 5.2 — Deploy Frontend to Vercel
+────────────────────────────────────────────────────────────────────────────────
+  1. Go to: https://vercel.com/new
+  2. Import your GitHub repository
+  3. Set Root Directory to: frontend
+  4. Set Framework Preset to: Vite
+  5. Add Environment Variable in Vercel dashboard:
+       VITE_API_URL = https://YOUR-NGROK-URL/api
+  6. Click Deploy
+  7. Vercel gives you a URL like: https://code-gurukul.vercel.app
+  
+  ⚠️  Every time your ngrok URL changes, update the Vercel env variable:
+      Vercel Dashboard → Project → Settings → Environment Variables
+      Update VITE_API_URL → Redeploy
+
+STEP 5.3 — Configure Frontend CORS
+────────────────────────────────────────────────────────────────────────────────
+  The backend already allows all origins (cors() with no restrictions).
+  No changes needed for Vercel → ngrok communication.
+
+================================================================================
+  PHASE 6 — DISTRIBUTE WINDOWS APP TO STUDENT PCs
+================================================================================
+
+STEP 6.1 — Build the Student App
+────────────────────────────────────────────────────────────────────────────────
+  IMPORTANT: Before building, make sure config.js has the correct ngrok URL.
+  Run: how_to_deploy/4_update_ngrok_url.bat  (if not already done)
+  
+  Then run:  how_to_deploy/7_build_windows_app.bat
+  
+  Output: windows-app/release/  contains the installer .exe
+
+STEP 6.2 — Install on Student PCs
+────────────────────────────────────────────────────────────────────────────────
+  Copy the installer from windows-app/release/ to each student PC.
+  Double-click to install.
+  
+  ⚠️  The ngrok URL is baked into the build. If ngrok URL changes,
+      you must rebuild and redistribute the app OR the student must have
+      the latest version.
+  
+  TIP: For lab environments, install once on a base image then clone.
+
+================================================================================
+  PHASE 7 — DAILY OPERATIONS
+================================================================================
+
+STARTING THE SYSTEM EACH DAY:
+────────────────────────────────────────────────────────────────────────────────
+  1. On the server PC, run:  server_start.bat
+  2. If ngrok URL changed (free plan), run:  how_to_deploy/4_update_ngrok_url.bat
+  3. If frontend is on Vercel: update VITE_API_URL in Vercel dashboard → redeploy
+  4. Student PCs: ngrok URL is baked in the app (only matters if URL changed)
+
+ADMIN LOGIN:
+────────────────────────────────────────────────────────────────────────────────
+  Email:    admin@codegurukul.dev
+  Password: admin
+  URL:      https://your-vercel-app.vercel.app/login  (or localhost:5173 for local)
+
+TROUBLESHOOTING:
+────────────────────────────────────────────────────────────────────────────────
+  Problem: Backend won't start
+  Fix: Check if port 5000 is already in use: netstat -ano | findstr :5000
+       Kill it: taskkill /F /PID <PID>
+
+  Problem: PostgreSQL connection failed
+  Fix: net start "postgresql-x64-15"
+       Check PG_PASSWORD in backend/.env matches your PostgreSQL install password
+
+  Problem: MongoDB connection failed
+  Fix: net start MongoDB
+       Check: mongosh → should connect without errors
+
+  Problem: ngrok "authtoken" error
+  Fix: ngrok config add-authtoken YOUR_TOKEN_FROM_DASHBOARD
+
+  Problem: Student app shows "Cannot connect to server"
+  Fix: Run 4_update_ngrok_url.bat with the new ngrok URL, then rebuild app
+
+================================================================================
+  QUICK REFERENCE — ALL BAT FILES
+================================================================================
+
+  ┌─────────────────────────────────────┬──────────────────────────────────────┐
+  │ File                                │ Purpose                              │
+  ├─────────────────────────────────────┼──────────────────────────────────────┤
+  │ 1_create_databases.bat              │ Create PostgreSQL DB + seed admin    │
+  │ 2_setup_env.bat                     │ Create backend/.env from template    │
+  │ 3_install_dependencies.bat          │ npm install for all 3 folders        │
+  │ 4_update_ngrok_url.bat              │ Update ngrok URL in all config files │
+  │ 5_test_windows_app.bat              │ Launch Electron app in dev mode      │
+  │ 6_push_to_github.bat                │ Git add + commit + push              │
+  │ 7_build_windows_app.bat             │ Build Electron app for distribution  │
+  │ 8_start_frontend_dev.bat            │ Start frontend dev server (port 5173)│
+  │ 9_restart_backend.bat               │ Kill port 5000 + restart Node server │
+  │ 10_full_fresh_deploy.bat            │ Full automated setup (first time)    │
+  ├─────────────────────────────────────┼──────────────────────────────────────┤
+  │ server_start.bat   (root folder)    │ Start full server stack + ngrok      │
+  │ install_compilers.bat (root folder) │ Install Go, R for code execution     │
+  └─────────────────────────────────────┴──────────────────────────────────────┘
+
+================================================================================

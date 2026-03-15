@@ -8,7 +8,7 @@ const MyClasses = () => {
 
   useEffect(() => {
     api.get('/teacher/my-subjects')
-      .then(r => setSubjects(r.data.filter(s => s.type === 'major')))
+      .then(r => setSubjects(r.data.filter(s => s.type === 'major' || s.type === 'vsc')))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);

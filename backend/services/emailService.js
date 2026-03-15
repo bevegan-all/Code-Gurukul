@@ -11,13 +11,14 @@ const transporter = nodemailer.createTransport({
 });
 
 class EmailService {
-  async sendEmail(to, subject, htmlContent) {
+  async sendEmail(to, subject, htmlContent, attachments = []) {
     try {
       const info = await transporter.sendMail({
         from: process.env.EMAIL_FROM || `"CodeGurukul" <${process.env.EMAIL_USER}>`,
         to: Array.isArray(to) ? to.join(', ') : to,
         subject,
         html: htmlContent,
+        attachments
       });
       console.log(`Email sent to ${to}. MessageId: ${info.messageId}`);
       return { success: true, data: info };

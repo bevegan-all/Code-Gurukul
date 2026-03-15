@@ -9,7 +9,10 @@ const notesSchema = new Schema({
   class_id: { type: Number, default: null },
   title: { type: String, required: true },
   content_html: { type: String, required: true },
-  status: { type: String, enum: ['draft', 'published'], default: 'draft' }
+  status: { type: String, enum: ['draft', 'published'], default: 'draft' },
+  lab_book_pdf_url: { type: String, default: null },
+  target_labs: { type: [Number], default: null },
+  is_lab_book: { type: Boolean, default: false }
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
 // 2. Chatbot Sessions
@@ -47,10 +50,19 @@ const idleAlertSchema = new Schema({
   resolved_at: { type: Date }
 }, { timestamps: { createdAt: 'detected_at', updatedAt: false } });
 
+// 6. Student Session
+const studentSessionSchema = new Schema({
+  student_id: { type: Number, required: true },
+  login_time: { type: Date, required: true },
+  logout_time: { type: Date, default: null },
+  session_duration_minutes: { type: Number, default: 0 }
+}, { timestamps: false });
+
 module.exports = {
   Note: mongoose.model('Note', notesSchema),
   ChatbotSession: mongoose.model('ChatbotSession', chatbotSessionSchema),
   StudentReport: mongoose.model('StudentReport', studentReportSchema),
   Notification: mongoose.model('Notification', notificationSchema),
-  IdleAlert: mongoose.model('IdleAlert', idleAlertSchema)
+  IdleAlert: mongoose.model('IdleAlert', idleAlertSchema),
+  StudentSession: mongoose.model('StudentSession', studentSessionSchema)
 };

@@ -44,7 +44,7 @@
     "appId": "com.codegurukul.app",
     "productName": "CodeGurukul Secure Lab",
     "win": {
-      "target": "nsis",
+      "target": ["nsis", "dir"],
       "icon": "public/icon.ico"
     },
     "nsis": {

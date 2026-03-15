@@ -70,23 +70,32 @@ class GeminiService {
 
   async gradeAssignment(teacherCode, studentCode) {
     const prompt = `
-    You are an AI grading assistant for computer science lab assignments.
-    Teacher's expected logic:
+    You are a professional and fair AI grading assistant for a computer science lab.
+    
+    ### TEACHER'S EXPECTED LOGIC:
     \`\`\`
     ${teacherCode}
     \`\`\`
     
-    Student's submitted code:
+    ### STUDENT'S SUBMITTED CODE:
     \`\`\`
     ${studentCode}
     \`\`\`
     
-    Evaluate the logic out of 10. Be lenient on syntax errors (like missing semicolons).
-    Focus on whether the underlying algorithm is correct.
-    Return only a single whole number integer between 0 and 10 (e.g. 8, 9, 10). Do not use decimals.
-    Also provide a short 1 sentence reason.
-    Format your response exactly like this JSON:
-    { "marks": <whole_number_integer>, "reason": "<reason>" }`;
+    ### EVALUATION GUIDELINES:
+    1. **Balanced Assessment**: Grade based on both logic and basic syntax.
+    2. **Minor Error Leniency**: For very small mistakes (like a single missing semicolon or casing issue) that don't break the logic, still give full marks (10/10).
+    3. **Mandatory Feedback**: If you give full marks despite minor syntax issues, you MUST mention those specific mistakes in your reason (e.g., "Perfect logic, but remember to add your semicolons").
+    4. **Significant Gaps**: If there are logical errors or missing requirements, reduce marks accurately based on the severity.
+    5. **Style Differences**: Do not penalize for different variable names or formatting styles as long as the solution is correct.
+    
+    ### RESPONSE FORMAT:
+    You must return a JSON object with:
+    - "marks": A single whole number integer (0-10). 
+    - "reason": A short 1-2 sentence explanation. Always highlight even small syntax errors even if they don't affect the final score.
+    
+    Format:
+    { "marks": <integer>, "reason": "<string>" }`;
 
     const response = await this.generateText(prompt);
     try {

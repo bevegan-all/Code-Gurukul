@@ -10,9 +10,37 @@ const CreateForm = ({ subjects, defaultSubjectId, onSaved, onClose }) => {
     title: '', compiler_required: 'java', time_limit_minutes: 60, status: 'draft',
     subject_id: defSub?.subject_id || '',
     class_id: defSub?.class_id || '',
+    target_labs: [],
     sets: [{ name: 'Set A', questions: [{ question_text: '', expected_code: '' }] }]
   });
   const [saving, setSaving] = useState(null); // null | 'draft' | 'published'
+  const [availableLabs, setAvailableLabs] = useState([]);
+
+  useEffect(() => {
+    if (!form.subject_id) {
+      setAvailableLabs([]);
+      return;
+    }
+    const sub = subjects.find(s => String(s.subject_id) === String(form.subject_id));
+    if (!sub) return;
+
+    if (sub.type === 'major' && form.class_id) {
+      api.get(`/teacher/labs/${form.class_id}`).then(res => setAvailableLabs(res.data)).catch(console.error);
+    } else if (sub.type === 'minor') {
+      api.get(`/teacher/minor-labs/${form.subject_id}`).then(res => setAvailableLabs(res.data)).catch(console.error);
+    } else {
+      setAvailableLabs([]);
+    }
+  }, [form.subject_id, form.class_id, subjects]);
+
+  const toggleLab = (labId) => {
+    setForm(f => ({
+      ...f,
+      target_labs: f.target_labs.includes(String(labId))
+        ? f.target_labs.filter(id => id !== String(labId))
+        : [...f.target_labs, String(labId)]
+    }));
+  };
 
   const addQ = () => setForm(f => { const s = [...f.sets]; s[0].questions = [...s[0].questions, { question_text: '', expected_code: '' }]; return { ...f, sets: s }; });
   const updateQ = (qi, field, val) => setForm(f => { const s = [...f.sets]; s[0].questions[qi][field] = val; return { ...f, sets: s }; });
@@ -72,6 +100,22 @@ const CreateForm = ({ subjects, defaultSubjectId, onSaved, onClose }) => {
               <input type="number" min="0" value={form.time_limit_minutes} onChange={e => setForm(f => ({ ...f, time_limit_minutes: e.target.value }))}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" />
             </div>
+          </div>
+
+          <div className="border-t border-gray-100 pt-4">
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Target Lab Batches <span className="text-gray-400 font-normal lowercase">(optional)</span></label>
+            {availableLabs.length === 0 ? (
+              <p className="text-sm text-gray-500 italic bg-gray-50 p-2 rounded-lg">Select a subject first to fetch its lab batches.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {availableLabs.map(lab => (
+                  <label key={lab.id} className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg cursor-pointer transition-all ${form.target_labs.includes(String(lab.id)) ? 'bg-purple-50 border-purple-200 shadow-sm' : 'hover:bg-gray-50'}`}>
+                    <input type="checkbox" className="w-4 h-4 text-purple-600 rounded" checked={form.target_labs.includes(String(lab.id))} onChange={() => toggleLab(lab.id)} />
+                    <span className="text-sm font-medium text-gray-700">{lab.name} {lab.roll_from ? `(${lab.roll_from}-${lab.roll_to})` : ''}</span>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="border-t border-gray-100 pt-4">

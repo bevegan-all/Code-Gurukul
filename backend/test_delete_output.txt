@@ -1,0 +1,2 @@
+Executing (default): SELECT "id", "name", "email", "phone", "password_hash", "role", "is_blind", "is_active", "department_id", "created_at" FROM "Users" AS "User" WHERE "User"."role" = 'student' LIMIT 1;
+Executing (default): DELETE FROM "Users" WHERE "id" = 73 AND "role" = 'student'

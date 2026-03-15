@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const requireRole = require('../middleware/roleGuard');
-const { Department, Course, Class, Subject, User, TeacherSubject, StudentProfile, StudentSubject, sequelize } = require('../models/postgres');
+const { Department, Course, Class, Subject, User, TeacherSubject, StudentProfile, StudentSubject, Lab, LabSlot, MinorLab, MinorLabSlot, sequelize } = require('../models/postgres');
+const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const emailService = require('../services/emailService');
 
@@ -17,7 +18,6 @@ router.get('/dashboard-stats', async (req, res) => {
     const courses = await Course.count();
     const departments = await Department.count();
 
-    // Fetch data for the chart (Students by Course) using raw SQL for safety
     const coursesData = await sequelize.query(`
       SELECT c.name, COUNT(sp.id) as students
       FROM "Courses" c
@@ -27,22 +27,13 @@ router.get('/dashboard-stats', async (req, res) => {
       ORDER BY students DESC
     `, { type: sequelize.QueryTypes.SELECT });
 
-    // Format chart data: Course Name -> Number of Students
     const chartData = coursesData.map(row => ({
       name: row.name,
       students: parseInt(row.students, 10) || 0
     }));
 
-    res.json({
-      teachers,
-      students,
-      courses,
-      departments,
-      chartData
-    });
-
+    res.json({ teachers, students, courses, departments, chartData });
   } catch (err) {
-    console.error('GET /dashboard-stats error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -115,14 +106,24 @@ router.get('/classes', async (req, res) => {
 
 router.post('/classes', async (req, res) => {
   try {
-    const cls = await Class.create({ name: req.body.name, course_id: req.body.course_id });
+    const { year, course_id, division, roll_no_prefix } = req.body;
+    const course = await Course.findByPk(course_id);
+    if (!course) return res.status(404).json({ error: 'Course not found' });
+    
+    const name = `${year} ${course.name} ${division}`;
+    const cls = await Class.create({ name, year, course_id, division, roll_no_prefix: roll_no_prefix || null });
     res.json(cls);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.put('/classes/:id', async (req, res) => {
   try {
-    await Class.update({ name: req.body.name, course_id: req.body.course_id }, { where: { id: req.params.id } });
+    const { year, course_id, division, roll_no_prefix } = req.body;
+    const course = await Course.findByPk(course_id);
+    if (!course) return res.status(404).json({ error: 'Course not found' });
+
+    const name = `${year} ${course.name} ${division}`;
+    await Class.update({ name, year, course_id, division, roll_no_prefix: roll_no_prefix || null }, { where: { id: req.params.id } });
     res.json({ msg: 'Class updated' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -133,6 +134,132 @@ router.delete('/classes/:id', async (req, res) => {
     res.json({ msg: 'Class deleted' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// --- LABS FOR CLASSES ---
+router.get('/classes/:id/labs', async (req, res) => {
+  try {
+    const labs = await Lab.findAll({ where: { class_id: req.params.id } });
+    res.json(labs);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/classes/:id/labs', async (req, res) => {
+  try {
+    const count = await Lab.count({ where: { class_id: req.params.id } });
+    if (count >= 5) return res.status(400).json({ error: 'Maximum 5 labs allowed per class' });
+    
+    const { name, roll_from, roll_to } = req.body;
+    const lab = await Lab.create({ class_id: req.params.id, name, roll_from, roll_to });
+    res.json(lab);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/labs/:id', async (req, res) => {
+  try {
+    const { name, roll_from, roll_to } = req.body;
+    await Lab.update({ name, roll_from, roll_to }, { where: { id: req.params.id } });
+    res.json({ msg: 'Lab updated' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/labs/:id', async (req, res) => {
+  try {
+    await Lab.destroy({ where: { id: req.params.id } });
+    res.json({ msg: 'Lab deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// --- LAB SLOTS ---
+router.get('/labs/:id/slots', async (req, res) => {
+  try {
+    const slots = await LabSlot.findAll({ 
+      where: { lab_id: req.params.id },
+      include: [
+        { model: User, attributes: ['id', 'name'] },
+        { model: Subject, attributes: ['id', 'name'] }
+      ]
+    });
+    res.json(slots);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/labs/:id/slots', async (req, res) => {
+  try {
+    const { day, start_time, end_time, teacher_id, subject_id } = req.body;
+    console.log('SAVING SLOT:', { day, start_time, end_time, teacher_id, subject_id });
+    const slot = await LabSlot.create({ 
+      lab_id: req.params.id, 
+      day, start_time, end_time, 
+      teacher_id: teacher_id ? parseInt(teacher_id) : null, 
+      subject_id: subject_id ? parseInt(subject_id) : null 
+    });
+    
+    // Auto-assign teacher to subject for this lab's class (non-blocking)
+    if (teacher_id && subject_id) {
+      try {
+        const lab = await Lab.findByPk(req.params.id);
+        if (lab) {
+          const sub = await Subject.findByPk(subject_id);
+          const assignType = (sub && ['major','minor','vsc'].includes(sub.type)) ? sub.type : 'major';
+          await TeacherSubject.findOrCreate({
+            where: { teacher_id: parseInt(teacher_id), subject_id: parseInt(subject_id), class_id: lab.class_id, type: assignType }
+          });
+        }
+      } catch (assignErr) {
+        console.error('Warning: Could not auto-assign teacher to subject:', assignErr.message);
+      }
+    }
+
+    res.json(slot);
+  } catch (err) {
+    console.error('ERROR SAVING SLOT:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/lab-slots/:id', async (req, res) => {
+  try {
+    const { day, start_time, end_time, teacher_id, subject_id } = req.body;
+    console.log('UPDATING SLOT:', { day, start_time, end_time, teacher_id, subject_id });
+    await LabSlot.update({ 
+      day, start_time, end_time, 
+      teacher_id: teacher_id ? parseInt(teacher_id) : null, 
+      subject_id: subject_id ? parseInt(subject_id) : null 
+    }, { where: { id: req.params.id } });
+    
+    // Auto-assign teacher to subject for this lab's class (non-blocking)
+    if (teacher_id && subject_id) {
+      try {
+        const slot = await LabSlot.findByPk(req.params.id);
+        if (slot) {
+          const lab = await Lab.findByPk(slot.lab_id);
+          if (lab) {
+             const sub = await Subject.findByPk(subject_id);
+             const assignType = (sub && ['major','minor','vsc'].includes(sub.type)) ? sub.type : 'major';
+             await TeacherSubject.findOrCreate({
+               where: { teacher_id: parseInt(teacher_id), subject_id: parseInt(subject_id), class_id: lab.class_id, type: assignType }
+             });
+          }
+        }
+      } catch (assignErr) {
+        console.error('Warning: Could not auto-assign teacher to subject:', assignErr.message);
+      }
+    }
+
+    res.json({ msg: 'Slot updated' });
+  } catch (err) {
+    console.error('ERROR UPDATING SLOT:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/lab-slots/:id', async (req, res) => {
+  try {
+    await LabSlot.destroy({ where: { id: req.params.id } });
+    res.json({ msg: 'Slot deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 
 // ================= SUBJECTS =================
 router.get('/subjects', async (req, res) => {
@@ -147,6 +274,8 @@ router.post('/subjects', async (req, res) => {
     const sub = await Subject.create({ 
       name: req.body.name, 
       type: req.body.type, 
+      year: req.body.year || 'FY',
+      department_id: req.body.type === 'minor' ? null : req.body.department_id,
       course_id: req.body.type === 'minor' ? null : req.body.course_id 
     });
     res.json(sub);
@@ -156,7 +285,10 @@ router.post('/subjects', async (req, res) => {
 router.put('/subjects/:id', async (req, res) => {
   try {
     await Subject.update({ 
-      name: req.body.name, type: req.body.type,
+      name: req.body.name, 
+      type: req.body.type,
+      year: req.body.year || 'FY',
+      department_id: req.body.type === 'minor' ? null : req.body.department_id,
       course_id: req.body.type === 'minor' ? null : req.body.course_id 
     }, { where: { id: req.params.id } });
     res.json({ msg: 'Subject updated' });
@@ -170,17 +302,103 @@ router.delete('/subjects/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// --- MINOR LABS ---
+router.get('/subjects/:id/minor-labs', async (req, res) => {
+  try {
+    const labs = await MinorLab.findAll({ where: { subject_id: req.params.id } });
+    res.json(labs);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/subjects/:id/minor-labs', async (req, res) => {
+  try {
+    const { name } = req.body;
+    const lab = await MinorLab.create({ subject_id: req.params.id, name });
+    res.json(lab);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/minor-labs/:id', async (req, res) => {
+  try {
+    await MinorLab.update({ name: req.body.name }, { where: { id: req.params.id } });
+    res.json({ msg: 'Minor lab updated' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/minor-labs/:id', async (req, res) => {
+  try {
+    await MinorLab.destroy({ where: { id: req.params.id } });
+    res.json({ msg: 'Minor lab deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// --- MINOR LAB SLOTS ---
+router.get('/minor-labs/:id/slots', async (req, res) => {
+  try {
+    const slots = await MinorLabSlot.findAll({ 
+      where: { minor_lab_id: req.params.id },
+      include: [{ model: User, attributes: ['id', 'name'] }]
+    });
+    res.json(slots);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/minor-labs/:id/slots', async (req, res) => {
+  try {
+    const { day, start_time, end_time, teacher_id } = req.body;
+    const slot = await MinorLabSlot.create({ minor_lab_id: req.params.id, day, start_time, end_time, teacher_id });
+    
+    if (teacher_id) {
+      const minorLab = await MinorLab.findByPk(req.params.id);
+      if (minorLab) {
+        await TeacherSubject.findOrCreate({
+          where: { teacher_id, subject_id: minorLab.subject_id, class_id: null, type: 'minor' }
+        });
+      }
+    }
+
+    res.json(slot);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/minor-lab-slots/:id', async (req, res) => {
+  try {
+    const { day, start_time, end_time, teacher_id } = req.body;
+    await MinorLabSlot.update({ day, start_time, end_time, teacher_id }, { where: { id: req.params.id } });
+    
+    if (teacher_id) {
+      const slot = await MinorLabSlot.findByPk(req.params.id);
+      if (slot) {
+        const minorLab = await MinorLab.findByPk(slot.minor_lab_id);
+        if (minorLab) {
+          await TeacherSubject.findOrCreate({
+            where: { teacher_id, subject_id: minorLab.subject_id, class_id: null, type: 'minor' }
+          });
+        }
+      }
+    }
+
+    res.json({ msg: 'Slot updated' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/minor-lab-slots/:id', async (req, res) => {
+  try {
+    await MinorLabSlot.destroy({ where: { id: req.params.id } });
+    res.json({ msg: 'Slot deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+
 // ================= TEACHERS =================
 router.get('/teachers', async (req, res) => {
   try {
-    // First get all teachers
     const teachers = await User.findAll({
       where: { role: 'teacher' },
       attributes: { exclude: ['password_hash'] },
       raw: true
     });
 
-    // Then get their subject assignments separately
     const [assignments] = await sequelize.query(`
       SELECT ts.teacher_id, ts.subject_id, ts.class_id, ts.type,
              s.name AS subject_name,
@@ -190,7 +408,6 @@ router.get('/teachers', async (req, res) => {
       LEFT JOIN "Classes" cl ON ts.class_id = cl.id
     `);
 
-    // Attach assignments to teachers
     const result = teachers.map(t => ({
       ...t,
       TeacherSubjects: assignments.filter(a => a.teacher_id === t.id).map(a => ({
@@ -204,7 +421,6 @@ router.get('/teachers', async (req, res) => {
 
     res.json(result);
   } catch (err) {
-    console.error('GET /teachers error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -212,12 +428,13 @@ router.get('/teachers', async (req, res) => {
 router.post('/teachers', async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { name, email, phone, major_assignments, minor_subject_id } = req.body;
-    // major_assignments = [{ subject_id, class_id }, ...]
+    const { name, email, phone, major_assignments, minor_subject_id, department_id } = req.body;
     
     const defaultPassword = 'Teacher@123';
     const password_hash = await bcrypt.hash(defaultPassword, 10);
-    const teacher = await User.create({ name, email, phone: phone || null, password_hash, role: 'teacher' }, { transaction: t });
+    const teacher = await User.create({ 
+      name, email, phone: phone || null, password_hash, role: 'teacher', department_id: department_id || null 
+    }, { transaction: t });
 
     if (major_assignments && major_assignments.length > 0) {
       for (const asgn of major_assignments) {
@@ -234,7 +451,6 @@ router.post('/teachers', async (req, res) => {
 
     await t.commit();
 
-    // Non-blocking welcome email
     emailService.sendWelcomeEmail(email, name, 'teacher', defaultPassword)
       .catch(err => console.error('Teacher welcome email failed:', err.message));
 
@@ -251,8 +467,8 @@ router.post('/teachers', async (req, res) => {
 router.put('/teachers/:id', async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { name, phone, is_active, major_assignments, minor_subject_id } = req.body;
-    await User.update({ name, phone, is_active }, { where: { id: req.params.id, role: 'teacher' }, transaction: t });
+    const { name, phone, is_active, major_assignments, minor_subject_id, department_id } = req.body;
+    await User.update({ name, phone, is_active, department_id: department_id || null }, { where: { id: req.params.id, role: 'teacher' }, transaction: t });
 
     if (major_assignments !== undefined || minor_subject_id !== undefined) {
       await TeacherSubject.destroy({ where: { teacher_id: req.params.id }, transaction: t });
@@ -285,23 +501,25 @@ router.delete('/teachers/:id', async (req, res) => {
 // ================= STUDENTS =================
 router.get('/students', async (req, res) => {
   try {
-    // Base students
     const students = await User.findAll({
       where: { role: 'student' },
       attributes: { exclude: ['password_hash'] },
       raw: true
     });
 
-    // Fetch profiles with class and minor subject in one raw query
     const [profiles] = await sequelize.query(`
-      SELECT sp.user_id, sp.roll_no, sp.parent_email, sp.class_id, sp.minor_subject_id,
+      SELECT sp.user_id, sp.roll_no, sp.parent_email, sp.parent_phone, sp.class_id, sp.minor_subject_id, sp.lab_id, sp.minor_lab_id,
              cl.name AS class_name,
              co.name AS course_name,
-             ms.name AS minor_subject_name
+             ms.name AS minor_subject_name,
+             l.name AS lab_name,
+             ml.name AS minor_lab_name
       FROM "StudentProfiles" sp
       LEFT JOIN "Classes" cl ON sp.class_id = cl.id
       LEFT JOIN "Courses" co ON cl.course_id = co.id
       LEFT JOIN "Subjects" ms ON sp.minor_subject_id = ms.id
+      LEFT JOIN "Labs" l ON sp.lab_id = l.id
+      LEFT JOIN "MinorLabs" ml ON sp.minor_lab_id = ml.id
     `);
 
     const result = students.map(s => {
@@ -311,17 +529,21 @@ router.get('/students', async (req, res) => {
         StudentProfile: profile ? {
           roll_no: profile.roll_no,
           parent_email: profile.parent_email,
+          parent_phone: profile.parent_phone,
           class_id: profile.class_id,
           minor_subject_id: profile.minor_subject_id,
+          lab_id: profile.lab_id,
+          minor_lab_id: profile.minor_lab_id,
           Class: profile.class_id ? { name: profile.class_name, Course: { name: profile.course_name } } : null,
-          MinorSubject: profile.minor_subject_id ? { name: profile.minor_subject_name } : null
+          MinorSubject: profile.minor_subject_id ? { name: profile.minor_subject_name } : null,
+          Lab: profile.lab_id ? { name: profile.lab_name } : null,
+          MinorLab: profile.minor_lab_id ? { name: profile.minor_lab_name } : null
         } : null
       };
     });
 
     res.json(result);
   } catch (err) {
-    console.error('GET /students error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -329,9 +551,8 @@ router.get('/students', async (req, res) => {
 router.post('/students', async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { name, email, phone, is_blind, roll_no, parent_email, class_id, minor_subject_id } = req.body;
-    
-    const defaultPassword = 'Student@123';
+    const { name, email, phone, is_blind, roll_no, parent_email, parent_phone, class_id, minor_subject_id, lab_id, minor_lab_id } = req.body;
+    const defaultPassword = 'student123';
     const password_hash = await bcrypt.hash(defaultPassword, 10);
 
     const student = await User.create({ 
@@ -343,12 +564,37 @@ router.post('/students', async (req, res) => {
       class_id: class_id || null,
       roll_no: roll_no || null,
       parent_email: parent_email || null,
-      minor_subject_id: minor_subject_id || null
+      parent_phone: parent_phone || null,
+      minor_subject_id: minor_subject_id || null,
+      lab_id: lab_id || null,
+      minor_lab_id: minor_lab_id || null
     }, { transaction: t });
+
+    if (class_id) {
+      const cls = await Class.findByPk(class_id, { transaction: t });
+      if (cls && cls.course_id) {
+        const majorSubjects = await Subject.findAll({ 
+          where: { 
+            course_id: cls.course_id, 
+            type: { [Op.or]: ['major', 'vsc'] } 
+          }, 
+          transaction: t 
+        });
+        for (const sub of majorSubjects) {
+          await StudentSubject.create({ student_id: student.id, subject_id: sub.id }, { transaction: t });
+        }
+      }
+    }
+
+    if (minor_subject_id) {
+      await StudentSubject.findOrCreate({
+        where: { student_id: student.id, subject_id: minor_subject_id },
+        transaction: t
+      });
+    }
 
     await t.commit();
 
-    // Non-blocking welcome email with roll number
     emailService.sendWelcomeEmail(email, name, 'student', defaultPassword, roll_no || null)
       .catch(err => console.error('Student welcome email failed:', err.message));
 
@@ -365,9 +611,49 @@ router.post('/students', async (req, res) => {
 router.put('/students/:id', async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { name, phone, is_active, is_blind, roll_no, parent_email, class_id, minor_subject_id } = req.body;
+    const { name, phone, is_active, is_blind, roll_no, parent_email, parent_phone, class_id, minor_subject_id, lab_id, minor_lab_id } = req.body;
     await User.update({ name, phone, is_active, is_blind }, { where: { id: req.params.id, role: 'student' }, transaction: t });
-    await StudentProfile.update({ roll_no, parent_email, class_id, minor_subject_id }, { where: { user_id: req.params.id }, transaction: t });
+    
+    // Check old profile to know if class changed
+    const oldSp = await StudentProfile.findOne({ where: { user_id: req.params.id }, transaction: t });
+    
+    await StudentProfile.update({ 
+      roll_no, parent_email, parent_phone, class_id, minor_subject_id, lab_id, minor_lab_id 
+    }, { where: { user_id: req.params.id }, transaction: t });
+    
+    // Re-assign subjects if class or minor subject changed
+    if ((class_id && oldSp && oldSp.class_id !== class_id) || (minor_subject_id && oldSp && oldSp.minor_subject_id !== minor_subject_id)) {
+      // Clear old subjects
+      await StudentSubject.destroy({ where: { student_id: req.params.id }, transaction: t });
+      
+      // Re-assign Major subjects
+      const currentClassId = class_id || (oldSp ? oldSp.class_id : null);
+      if (currentClassId) {
+        const cls = await Class.findByPk(currentClassId, { transaction: t });
+        if (cls && cls.course_id) {
+          const majorSubjects = await Subject.findAll({ 
+            where: { 
+              course_id: cls.course_id, 
+              type: { [Op.or]: ['major', 'vsc'] } 
+            }, 
+            transaction: t 
+          });
+          for (const sub of majorSubjects) {
+            await StudentSubject.create({ student_id: req.params.id, subject_id: sub.id }, { transaction: t });
+          }
+        }
+      }
+
+      // Re-assign Minor subject
+      const currentMinorSubId = minor_subject_id || (oldSp ? oldSp.minor_subject_id : null);
+      if (currentMinorSubId) {
+        await StudentSubject.findOrCreate({
+          where: { student_id: req.params.id, subject_id: currentMinorSubId },
+          transaction: t
+        });
+      }
+    }
+
     await t.commit();
     res.json({ msg: 'Student updated' });
   } catch (err) { await t.rollback(); res.status(500).json({ error: err.message }); }
@@ -381,32 +667,109 @@ router.delete('/students/:id', async (req, res) => {
 });
 
 // ================= LEADERBOARD =================
+router.get('/leaderboard-filters', async (req, res) => {
+  try {
+    const departments = await Department.findAll({ attributes: ['id', 'name'], order: [['name', 'ASC']] });
+    const courses = await Course.findAll({ attributes: ['id', 'name', 'department_id'], order: [['name', 'ASC']] });
+    const classes = await Class.findAll({ attributes: ['id', 'name', 'course_id'], order: [['name', 'ASC']] });
+    res.json({ departments, courses, classes });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/leaderboard', async (req, res) => {
   try {
-    const [rows] = await sequelize.query(`
-      SELECT
-        u.id,
-        u.name,
-        sp.roll_no,
-        cl.name                                            AS class_name,
-        COUNT(DISTINCT sas.id)                             AS assignment_count,
-        COALESCE(AVG(sas.ai_marks), 0)                     AS avg_assignment_marks,
-        COUNT(DISTINCT sqs.id)                             AS quiz_count,
-        COALESCE(AVG(sqs.total_marks), 0)                  AS avg_quiz_marks,
-        COALESCE(AVG(sas.ai_marks), 0) * 50.0 / 10
-          + COALESCE(AVG(sqs.total_marks), 0) * 50.0 / 100 AS total_score
+    const { taskType = 'both', sortBy = 'accuracy', departmentId, courseId, classId } = req.query;
+    const replacements = { taskType, sortBy };
+
+    let whereClause = "";
+    if (classId) {
+      whereClause += ' AND cl."id" = :classId';
+      replacements.classId = classId;
+    } else if (courseId) {
+      whereClause += ' AND cr."id" = :courseId';
+      replacements.courseId = courseId;
+    } else if (departmentId) {
+      whereClause += ' AND d."id" = :deptId';
+      replacements.deptId = departmentId;
+    }
+
+    const leaderboardData = await sequelize.query(`
+      SELECT 
+        u."id" as "student_id", 
+        u."name" as "student_name",
+        sp."roll_no",
+        cl."name" as "class_name",
+        CASE 
+          WHEN :taskType = 'lab' THEN COALESCE(l."lab_score", 0)
+          WHEN :taskType = 'quiz' THEN COALESCE(q."quiz_score", 0)
+          ELSE COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0)
+        END as "total_score",
+        LEAST(CASE
+          WHEN :taskType = 'lab' THEN 
+            CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0)::float / l."lab_max") * 100 ELSE 0 END
+          WHEN :taskType = 'quiz' THEN 
+            CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0)::float / q."quiz_max") * 100 ELSE 0 END
+          ELSE
+            CASE WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
+                 THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0))::float / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))) * 100 
+                 ELSE 0 END
+        END, 100) as "accuracy"
       FROM "Users" u
-      JOIN "StudentProfiles" sp ON sp.user_id = u.id
-      LEFT JOIN "Classes" cl    ON cl.id = sp.class_id
-      LEFT JOIN "StudentAssignmentSubmissions" sas ON sas.student_id = u.id
-      LEFT JOIN "StudentQuizSubmissions" sqs        ON sqs.student_id = u.id
-      WHERE u.role = 'student' AND u.is_active = true
-      GROUP BY u.id, u.name, sp.roll_no, cl.name
-      ORDER BY total_score DESC
-    `, { type: sequelize.QueryTypes.SELECT });
-    res.json({ students: rows });
+      JOIN "StudentProfiles" sp ON u."id" = sp."user_id"
+      LEFT JOIN "Classes" cl ON cl."id" = sp."class_id"
+      LEFT JOIN "Courses" cr ON cl."course_id" = cr."id"
+      LEFT JOIN "Departments" d ON cr."department_id" = d."id"
+      LEFT JOIN (
+        SELECT sub."student_id", SUM(sub."ai_marks") as "lab_score", SUM(sub."max_marks") as "lab_max" FROM (
+          SELECT sas."student_id", sas."ai_marks", aq."max_marks",
+                 ROW_NUMBER() OVER(PARTITION BY sas."student_id", sas."question_id" ORDER BY sas."submitted_at" DESC) as rn
+          FROM "StudentAssignmentSubmissions" sas
+          JOIN "AssignmentQuestions" aq ON sas."question_id" = aq."id"
+          JOIN "AssignmentSets" asets ON aq."set_id" = asets."id"
+          JOIN "LabAssignments" la ON asets."assignment_id" = la."id"
+          WHERE 1=1
+        ) sub WHERE rn = 1
+        GROUP BY sub."student_id"
+      ) l ON l."student_id" = u."id"
+      LEFT JOIN (
+        SELECT sub."student_id", SUM(sub."total_marks") as "quiz_score", SUM(sub."max_marks") as "quiz_max" FROM (
+          SELECT sqs."student_id", sqs."total_marks", qz."total_marks" as "max_marks",
+                 ROW_NUMBER() OVER(PARTITION BY sqs."student_id", sqs."quiz_id" ORDER BY sqs."submitted_at" DESC) as rn
+          FROM "StudentQuizSubmissions" sqs
+          JOIN "Quizzes" qz ON sqs."quiz_id" = qz."id"
+          WHERE 1=1
+        ) sub WHERE rn = 1
+        GROUP BY sub."student_id"
+      ) q ON q."student_id" = u."id"
+      WHERE u."role" = 'student' AND u."is_active" = true ${whereClause}
+      ORDER BY 
+        CASE WHEN :sortBy = 'accuracy' THEN 
+           (CASE
+            WHEN :taskType = 'lab' THEN 
+              CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0)::float / l."lab_max") * 100 ELSE 0 END
+            WHEN :taskType = 'quiz' THEN 
+              CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0)::float / q."quiz_max") * 100 ELSE 0 END
+            ELSE
+              CASE WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
+                   THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0))::float / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))) * 100 
+                   ELSE 0 END
+          END)
+        ELSE
+          (CASE 
+            WHEN :taskType = 'lab' THEN COALESCE(l."lab_score", 0)
+            WHEN :taskType = 'quiz' THEN COALESCE(q."quiz_score", 0)
+            ELSE COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0)
+          END)
+        END DESC, 
+        u."name" ASC
+      LIMIT 100
+    `, { replacements, type: sequelize.QueryTypes.SELECT });
+
+    res.json({ students: leaderboardData });
   } catch (err) {
-    console.error('Admin leaderboard error:', err.message);
+    console.error('[Admin Leaderboard] Error:', err);
     res.status(500).json({ error: 'Failed to fetch leaderboard', detail: err.message });
   }
 });

@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, LogOut, BookOpen, Clock, Users, FileCode2, BookMarked, NotebookPen, GraduationCap, Trophy } from 'lucide-react';
+import { LayoutDashboard, LogOut, BookOpen, Clock, Users, FileCode2, BookMarked, NotebookPen, GraduationCap, Trophy, Calendar } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 const TeacherSidebar = () => {
@@ -8,6 +8,7 @@ const TeacherSidebar = () => {
 
   const navItems = [
     { label: 'Dashboard', icon: LayoutDashboard, path: '/teacher/dashboard' },
+    { label: 'My Timetable', icon: Calendar, path: '/teacher/timetable' },
     { label: 'My Subjects', icon: BookMarked, path: '/teacher/subjects' },
     { label: 'My Classes', icon: Users, path: '/teacher/classes' },
     { label: 'Students', icon: GraduationCap, path: '/teacher/students' },

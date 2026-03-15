@@ -1,0 +1,938 @@
+[
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_pkey",
+    "column_name": "id",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "MinorLabStudents",
+    "constraint_name": "MinorLabStudents_student_id_fkey",
+    "column_name": "student_id",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key153",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key151",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key149",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key147",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key145",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key80",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key82",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key87",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key85",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key83",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key81",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key79",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key77",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key75",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key73",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key71",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key69",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key67",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key65",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key63",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key61",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key59",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key10",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key8",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key6",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key3",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key52",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key49",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key46",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key44",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key43",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key41",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key55",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key39",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key143",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key141",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key139",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key137",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key84",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key86",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key135",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key133",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key131",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key129",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key127",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key125",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key123",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key121",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key119",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key93",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key91",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key89",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key50",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key9",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key117",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key115",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key113",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key111",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key109",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key107",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key104",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key110",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key112",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key99",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key97",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key11",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key13",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key15",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key17",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key19",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key23",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key24",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key26",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key28",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key29",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key27",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key25",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key47",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key20",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key18",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key56",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key54",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key45",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key16",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key14",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key12",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key51",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key1",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key22",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key21",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key2",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key4",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key5",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key7",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key30",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key31",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key33",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key34",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key36",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key38",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key40",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key42",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key48",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key53",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key57",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key58",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key60",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key62",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key64",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key66",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key68",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key70",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key72",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key74",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key76",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key78",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key37",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key35",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key32",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key88",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key90",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key92",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key94",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key95",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key96",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key98",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key100",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key101",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key102",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key103",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key105",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key106",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key108",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key114",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key116",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key118",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key120",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key122",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key124",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key126",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key128",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key130",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key132",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key134",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key136",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key138",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key140",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key142",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key144",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key146",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key148",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key150",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  },
+  {
+    "table_name": "StudentProfiles",
+    "constraint_name": "StudentProfiles_roll_no_key152",
+    "column_name": "roll_no",
+    "foreign_table_name": "StudentProfiles"
+  }
+]

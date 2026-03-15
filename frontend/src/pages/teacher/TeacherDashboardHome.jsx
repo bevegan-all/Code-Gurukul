@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Users, BookOpen, GraduationCap, FileCode2, Clock, Activity, ArrowRight, BookMarked, NotebookPen } from 'lucide-react';
+import { Users, BookOpen, GraduationCap, FileCode2, Clock, Activity, ArrowRight, BookMarked, NotebookPen, MonitorPlay } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { io } from 'socket.io-client';
 import api from '../../utils/axios';
+import StudentDetailModal from '../../components/StudentDetailModal';
 
 const TeacherDashboardHome = () => {
   const [stats, setStats] = useState({
@@ -12,12 +14,27 @@ const TeacherDashboardHome = () => {
     myClasses: []
   });
   const [loading, setLoading] = useState(true);
+  const [currentSlot, setCurrentSlot] = useState(null);
+  const [slotStudents, setSlotStudents] = useState([]);
+  const [onlineIds, setOnlineIds] = useState(new Set());
+  const [selectedStudentId, setSelectedStudentId] = useState(null);
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
         const res = await api.get('/teacher/dashboard-stats');
         setStats(res.data);
+        
+        // Fetch current active lab
+        const slotRes = await api.get('/teacher/current-lab');
+        if (slotRes.data) {
+          setCurrentSlot(slotRes.data);
+          // Fetch all students for this slot to show in live monitor even if offline
+          const sres = await api.get(`/teacher/my-students-by-subject/${slotRes.data.subject_id}`, { 
+            params: { lab_id: slotRes.data.lab_id } 
+          });
+          setSlotStudents(sres.data);
+        }
       } catch (err) {
         console.error('Failed to fetch teacher dashboard stats:', err);
       } finally {
@@ -26,6 +43,43 @@ const TeacherDashboardHome = () => {
     };
     fetchStats();
   }, []);
+
+  useEffect(() => {
+    if (!stats.myClasses.length) return;
+
+    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const SOCKET_URL = apiBase.replace(/\/api$/, '');
+    const socket = io(SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+      extraHeaders: { 'ngrok-skip-browser-warning': 'true' },
+    });
+
+    socket.on('connect', () => {
+      const classIds = [...new Set(stats.myClasses.filter(c => c.class_id || c.Class?.id).map(c => c.class_id || c.Class?.id))];
+      classIds.forEach(id => socket.emit('join_teacher_monitor', { classId: id }));
+    });
+
+    const updateOnline = (data) => {
+      setOnlineIds(prev => {
+        const next = new Set(prev);
+        const sid = Number(data.studentId);
+        if (!data.activity || data.activity !== 'Offline') {
+          next.add(sid);
+        } else {
+          next.delete(sid);
+        }
+        return next;
+      });
+    };
+
+    socket.on('student:online', updateOnline);
+    socket.on('student:ping', updateOnline);
+    socket.on('student:activity', updateOnline);
+
+    return () => socket.disconnect();
+  }, [stats.myClasses]);
+
+  const onlineInSlot = slotStudents.filter(s => onlineIds.has(Number(s.id))).length;
 
   const cards = [
     { title: 'My Subjects', value: stats.subjects, icon: BookMarked, color: 'bg-purple-500', trend: 'Assigned', path: '/teacher/subjects' },
@@ -87,21 +141,46 @@ const TeacherDashboardHome = () => {
           
           <div className="space-y-4">
             {stats.myClasses && stats.myClasses.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                 {stats.myClasses.map((ts) => (
-                    <div key={ts.id} className="p-4 rounded-xl border border-gray-100 hover:border-purple-200 hover:shadow-sm transition-all bg-gray-50/50">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <p className="font-semibold text-gray-900">{ts.subject_name || ts.Subject?.name || 'Unknown'}</p>
-                          <p className="text-sm text-gray-500">{ts.class_name || ts.Class?.name || 'Unknown Class'}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                   {stats.myClasses.map((ts) => {
+                      const isActive = currentSlot && 
+                                     (ts.subject_id === currentSlot.subject_id || ts.Subject?.id === currentSlot.subject_id) && 
+                                     (ts.class_id === currentSlot.class_id || ts.Class?.id === currentSlot.class_id);
+                      return (
+                        <div 
+                          key={ts.id} 
+                          className={`p-4 rounded-xl border transition-all relative ${
+                            isActive 
+                              ? 'border-purple-500 bg-purple-50 shadow-md ring-1 ring-purple-200' 
+                              : 'border-gray-100 hover:border-purple-200 bg-gray-50/50'
+                          }`}
+                        >
+                          {isActive && (
+                            <div className="absolute -top-2 -right-2 flex h-6 w-12 items-center justify-center rounded-full bg-purple-600 text-[10px] font-bold text-white shadow-lg animate-bounce">
+                              LIVE
+                            </div>
+                          )}
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className={`font-semibold ${isActive ? 'text-purple-900' : 'text-gray-900'}`}>
+                                {ts.subject_name || ts.Subject?.name || 'Unknown'}
+                              </p>
+                              <p className={`text-sm ${isActive ? 'text-purple-600' : 'text-gray-500'}`}>
+                                {ts.class_name || ts.Class?.name || 'Unknown Class'}
+                              </p>
+                            </div>
+                            <span className={`px-2 py-1 text-xs font-semibold rounded-lg ${
+                              ts.Subject?.type === 'major' || ts.type === 'major' 
+                                ? 'bg-purple-100 text-purple-700' 
+                                : 'bg-blue-100 text-blue-700'
+                            }`}>
+                              {ts.Subject?.type || ts.type || 'subject'}
+                            </span>
+                          </div>
                         </div>
-                        <span className={`px-2 py-1 text-xs font-semibold rounded-lg ${ts.Subject?.type === 'major' || ts.type === 'major' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                          {ts.Subject?.type || ts.type || 'subject'}
-                        </span>
-                      </div>
-                    </div>
-                 ))}
-              </div>
+                      );
+                   })}
+                </div>
             ) : (
               <div className="py-12 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-100 rounded-xl">
                 No classes assigned to you yet.
@@ -123,16 +202,75 @@ const TeacherDashboardHome = () => {
             Get real-time insights into your students' active coding sessions and idle statuses during labs.
           </p>
           <div className="space-y-4">
-            {/* Minimal mockup representing system readiness */}
-            <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 text-center">
-              <Clock className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-600">No active lab sessions to monitor right now.</p>
-              <Link to="/teacher/monitor" className="mt-4 block text-sm font-medium text-purple-600 hover:underline">Go to Monitor Center</Link>
-            </div>
+            {currentSlot ? (
+              <div className="space-y-3">
+                <div className="p-3 bg-purple-50 rounded-xl border border-purple-100 flex justify-between items-center">
+                  <div>
+                    <p className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-1">Active Slot</p>
+                    <p className="text-sm font-bold text-gray-900">{currentSlot.subject_name}</p>
+                    <p className="text-xs text-gray-500">{currentSlot.lab_name} • {currentSlot.class_name}</p>
+                  </div>
+                  <button 
+                    onClick={async () => {
+                      const newVal = !currentSlot.is_unrestricted;
+                      const res = await api.post('/teacher/toggle-restriction', {
+                        slotId: currentSlot.id,
+                        type: currentSlot.type,
+                        isUnrestricted: newVal
+                      });
+                      if (res.data.success) setCurrentSlot(prev => ({ ...prev, is_unrestricted: newVal }));
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                      currentSlot.is_unrestricted ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-400'
+                    }`}
+                  >
+                    {currentSlot.is_unrestricted ? 'Unrestricted' : 'Restricted'}
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-gray-50 rounded-xl border border-gray-100 text-center">
+                    <p className="text-xl font-bold text-gray-900">{slotStudents.length}</p>
+                    <p className="text-[10px] text-gray-500 uppercase font-bold">Total Students</p>
+                  </div>
+                  <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-center">
+                    <p className="text-xl font-bold text-emerald-600">{onlineInSlot}</p>
+                    <p className="text-[10px] text-emerald-500 uppercase font-bold">Online Now</p>
+                  </div>
+                </div>
+
+                <div className="max-h-40 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                   {slotStudents.filter(s => onlineIds.has(Number(s.id))).map(s => (
+                     <div key={s.id} onClick={() => setSelectedStudentId(s.id)} className="flex items-center justify-between p-2 bg-white border border-gray-50 rounded-lg hover:border-purple-200 cursor-pointer transition-all">
+                        <div className="flex items-center gap-2">
+                           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                           <span className="text-xs font-bold text-gray-700">{s.name}</span>
+                        </div>
+                        <span className="text-[10px] text-gray-400 font-mono">{s.roll_no}</span>
+                     </div>
+                   ))}
+                </div>
+
+                <Link 
+                  to="/teacher/monitor" 
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-gray-900 hover:bg-black text-white rounded-xl text-sm font-bold transition-all"
+                >
+                  <MonitorPlay className="w-4 h-4" />
+                  Enter Monitor Center
+                </Link>
+              </div>
+            ) : (
+              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 text-center">
+                <Clock className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                <p className="text-sm text-gray-600">No active lab sessions to monitor right now.</p>
+                <Link to="/teacher/monitor" className="mt-4 block text-sm font-medium text-purple-600 hover:underline">Go to Monitor Center</Link>
+              </div>
+            )}
           </div>
         </div>
 
       </div>
+      {selectedStudentId && <StudentDetailModal studentId={selectedStudentId} onClose={() => setSelectedStudentId(null)} />}
     </div>
   );
 };

@@ -6,12 +6,15 @@ const ManageTeachers = () => {
   const [teachers, setTeachers] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [classes, setClasses] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState('');
+  const [filterDepartment, setFilterDepartment] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
 
   // Form state
-  const [form, setForm] = useState({ id: null, name: '', email: '', phone: '', is_active: true });
+  const [form, setForm] = useState({ id: null, name: '', email: '', phone: '', is_active: true, department_id: '' });
   // major_assignments = [{ subject_id, class_id }]
   const [majorAssignments, setMajorAssignments] = useState([]);
   const [minorSubjectId, setMinorSubjectId] = useState('');
@@ -36,18 +39,23 @@ const ManageTeachers = () => {
       setClasses(cRes.data);
     } catch (err) { console.error('Classes fetch failed:', err.response?.data || err.message); }
 
+    try {
+      const dRes = await api.get('/admin/departments');
+      setDepartments(dRes.data);
+    } catch (err) { console.error('Departments fetch failed:', err.response?.data || err.message); }
+
     setLoading(false);
   };
 
   const openCreate = () => {
-    setForm({ id: null, name: '', email: '', phone: '', is_active: true });
+    setForm({ id: null, name: '', email: '', phone: '', is_active: true, department_id: '' });
     setMajorAssignments([]);
     setMinorSubjectId('');
     setShowModal(true);
   };
 
   const openEdit = (teacher) => {
-    setForm({ id: teacher.id, name: teacher.name, email: teacher.email, phone: teacher.phone || '', is_active: teacher.is_active });
+    setForm({ id: teacher.id, name: teacher.name, email: teacher.email, phone: teacher.phone || '', is_active: teacher.is_active, department_id: teacher.department_id || '' });
     // reconstruct assignments
     const majors = (teacher.TeacherSubjects || []).filter(ts => ts.type === 'major').map(ts => ({ subject_id: String(ts.subject_id), class_id: String(ts.class_id) }));
     const minor = (teacher.TeacherSubjects || []).find(ts => ts.type === 'minor');
@@ -88,13 +96,17 @@ const ManageTeachers = () => {
   };
   const removeMajorRow = (idx) => setMajorAssignments(majorAssignments.filter((_, i) => i !== idx));
 
-  const majorSubjects = subjects.filter(s => s.type === 'major');
+  const majorSubjects = subjects.filter(s => s.type === 'major' && (!form.department_id || s.department_id === Number(form.department_id)));
   const minorSubjects = subjects.filter(s => s.type === 'minor');
+  const filteredClasses = classes.filter(c => !form.department_id || c.Course?.department_id === Number(form.department_id));
 
-  const filtered = teachers.filter(t =>
-    t.name.toLowerCase().includes(search.toLowerCase()) ||
-    t.email.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = teachers.filter(t => {
+    const matchesSearch = t.name.toLowerCase().includes(search.toLowerCase()) || t.email.toLowerCase().includes(search.toLowerCase());
+    // eslint-disable-next-line eqeqeq
+    const matchesDept = filterDepartment ? t.department_id == filterDepartment : true;
+    const matchesStatus = filterStatus ? (filterStatus === 'active' ? t.is_active : !t.is_active) : true;
+    return matchesSearch && matchesDept && matchesStatus;
+  });
 
   return (
     <div className="animate-slide-in space-y-6 flex flex-col h-[calc(100vh-8rem)]">
@@ -110,14 +122,25 @@ const ManageTeachers = () => {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col flex-1 overflow-hidden">
-        <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-          <div className="relative w-80">
+        <div className="p-4 border-b border-gray-100 flex flex-wrap gap-4 justify-between items-center bg-gray-50/50">
+          <div className="relative w-full max-w-sm">
             <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text" placeholder="Search teachers..."
               value={search} onChange={(e) => setSearch(e.target.value)}
               className="pl-10 pr-4 py-2 w-full border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
+          </div>
+          <div className="flex gap-3">
+            <select value={filterDepartment} onChange={e => setFilterDepartment(e.target.value)} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-primary">
+              <option value="">All Departments</option>
+              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-primary">
+              <option value="">All Statuses</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
           </div>
         </div>
 
@@ -208,6 +231,21 @@ const ManageTeachers = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
                   <input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
                 </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                  <select
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    value={form.department_id}
+                    onChange={(e) => {
+                      setForm({ ...form, department_id: e.target.value });
+                      setMajorAssignments([]); // clear major assignments when department changes
+                    }}
+                    required
+                  >
+                    <option value="">Select Department...</option>
+                    {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                </div>
                 {form.id && (
                   <div className="col-span-2 flex items-center gap-2">
                     <input type="checkbox" id="teacherActive" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="w-4 h-4 text-primary rounded border-gray-300" />
@@ -226,31 +264,63 @@ const ManageTeachers = () => {
                 </div>
                 {majorAssignments.length === 0 && <p className="text-xs text-gray-400 py-2">No major subjects assigned. Click "Add Row" to assign.</p>}
                 <div className="space-y-2">
-                  {majorAssignments.map((asgn, idx) => (
-                    <div key={idx} className="flex gap-2 items-center">
-                      <select
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary outline-none"
-                        value={asgn.subject_id}
-                        onChange={(e) => updateMajorRow(idx, 'subject_id', e.target.value)}
-                        required
-                      >
-                        <option value="">Select subject...</option>
-                        {majorSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                      </select>
-                      <select
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary outline-none"
-                        value={asgn.class_id}
-                        onChange={(e) => updateMajorRow(idx, 'class_id', e.target.value)}
-                        required
-                      >
-                        <option value="">Select class...</option>
-                        {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </select>
-                      <button type="button" onClick={() => removeMajorRow(idx)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0">
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
+                  {majorAssignments.map((asgn, idx) => {
+                    // Filter subjects: hide what's already chosen in OTHER rows for this teacher
+                    const otherSelectedSubjectIds = majorAssignments
+                      .filter((_, i) => i !== idx)
+                      .map(a => a.subject_id);
+                    
+                    const availableSubjectsForThisRow = majorSubjects.filter(s => 
+                      !otherSelectedSubjectIds.includes(String(s.id))
+                    );
+
+                    // Filter classes: must match subject's course/year AND not be globally taken by another teacher for same subject
+                    const selectedSub = subjects.find(s => String(s.id) === asgn.subject_id);
+                    let availableClassesForThisRow = [];
+                    
+                    if (selectedSub) {
+                      // 1. Global pairs already taken [subjectId-classId]
+                      const globalTakenPairs = teachers.flatMap(t => {
+                        if (t.id === form.id) return []; // skip current teacher
+                        return (t.TeacherSubjects || [])
+                          .filter(ts => ts.type === 'major')
+                          .map(ts => `${ts.subject_id}-${ts.class_id}`);
+                      });
+
+                      availableClassesForThisRow = classes.filter(c => {
+                        const isSameCourseYear = c.course_id === selectedSub.course_id && c.year === selectedSub.year;
+                        const isGloballyAvailable = !globalTakenPairs.includes(`${selectedSub.id}-${c.id}`);
+                        return isSameCourseYear && isGloballyAvailable;
+                      });
+                    }
+
+                    return (
+                      <div key={idx} className="flex gap-2 items-center">
+                        <select
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary outline-none"
+                          value={asgn.subject_id}
+                          onChange={(e) => updateMajorRow(idx, 'subject_id', e.target.value)}
+                          required
+                        >
+                          <option value="">Select subject...</option>
+                          {availableSubjectsForThisRow.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                        <select
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary outline-none"
+                          value={asgn.class_id}
+                          onChange={(e) => updateMajorRow(idx, 'class_id', e.target.value)}
+                          required
+                          disabled={!asgn.subject_id}
+                        >
+                          <option value="">Select class...</option>
+                          {availableClassesForThisRow.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                        <button type="button" onClick={() => removeMajorRow(idx)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

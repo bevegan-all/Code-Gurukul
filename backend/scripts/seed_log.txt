@@ -1,27 +1,28 @@
 === Seed Script Started ===
 DB connected.
-Student: id=9 name=Omkar email=5454317@mitacsc.edu.in
-Course: id=2 name=Computer Science
-Class: id=2 name=B.Tech CS Year 1
-Profile already has class_id: 2
-Teacher: id=11 name=Nishigandha 
-Subject: id=3 name=Data Structures type=major
-Subject: id=4 name=Algorithms type=major
-Subject: id=5 name=Web Development type=major
-TeacherSubject linked: teacher 11 -> subject Data Structures -> class 2
-TeacherSubject linked: teacher 11 -> subject Algorithms -> class 2
-TeacherSubject linked: teacher 11 -> subject Web Development -> class 2
+Student: id=79 name=Omkar Bhujbal email=5454317@mitacsc.edu.in
+Course: id=12 name=Computer Science
+Class: id=13 name=B.Tech CS Year 1
+Updated profile class_id to: 13
+Teacher: id=44 name=Prof. Rajiv Mehta
+Subject: id=19 name=Data Structures type=major
+Subject: id=24 name=Algorithms type=major
+Subject: id=20 name=Web Development type=minor
+TeacherSubject linked: teacher 44 -> subject Data Structures -> class 13
+TeacherSubject linked: teacher 44 -> subject Algorithms -> class 13
+TeacherSubject linked: teacher 44 -> subject Web Development -> class 13
 Assignment created for: Data Structures
 Assignment created for: Algorithms
 Assignment created for: Web Development
-Note already exists for: Data Structures
-Note already exists for: Algorithms
-Note already exists for: Web Development
+Deleted all old notes from MongoDB.
+Note created for: Data Structures
+Note created for: Algorithms
+Note created for: Web Development
 
 === Verification ===
-TeacherSubjects for class 2: 3
-Published assignments for class 2: 3
-Published notes for class 2: 3
+TeacherSubjects for class 13: 3
+Published assignments for class 13: 3
+Published notes for class 13: 3
 Dashboard subject count: 3
 
 === SEED COMPLETE ===

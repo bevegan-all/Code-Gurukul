@@ -1,0 +1,7 @@
+[dotenv@17.3.1] injecting env (23) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+PostgreSQL connected successfully
+MongoDB connected successfully
+PostgreSQL models synchronized
+Server running on port 5000
