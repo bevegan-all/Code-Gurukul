@@ -91,7 +91,7 @@ const StudentDetailModal = ({ studentId, onClose }) => {
               </div>
               <div className="text-4xl font-black text-gray-900 leading-none">
                 {Number(stats.avgAssignment).toFixed(1)}
-                <span className="text-sm font-bold text-gray-300 ml-2">avg / 10</span>
+                <span className="text-sm font-bold text-gray-300 ml-2">% Accuracy</span>
               </div>
             </div>
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
@@ -100,8 +100,8 @@ const StudentDetailModal = ({ studentId, onClose }) => {
                 <span className="text-gray-500 text-xs font-bold uppercase tracking-widest">Quizzes</span>
               </div>
               <div className="text-4xl font-black text-gray-900 leading-none">
-                {Number(stats.avgQuiz).toFixed(0)}
-                <span className="text-sm font-bold text-gray-300 ml-2">avg / 100</span>
+                {Number(stats.avgQuiz).toFixed(1)}
+                <span className="text-sm font-bold text-gray-300 ml-2">% Accuracy</span>
               </div>
             </div>
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
@@ -141,8 +141,8 @@ const StudentDetailModal = ({ studentId, onClose }) => {
                     {stats.academicStats && stats.academicStats.map((item, idx) => (
                       <tr key={idx}>
                         <td className="px-5 py-3 text-gray-700 font-bold">{item.subject_name}</td>
-                        <td className="px-5 py-3 text-center font-black text-gray-800">{Number(item.assignment_avg || 0).toFixed(1)} / 10</td>
-                        <td className="px-5 py-3 text-right font-black text-gray-800">{Number(item.quiz_avg || 0).toFixed(1)} / 10</td>
+                        <td className="px-5 py-3 text-center font-black text-gray-800">{Number(item.assignment_accuracy || 0).toFixed(1)}%</td>
+                        <td className="px-5 py-3 text-right font-black text-gray-800">{Number(item.quiz_accuracy || 0).toFixed(1)}%</td>
                       </tr>
                     ))}
                   </tbody>

@@ -41,7 +41,7 @@ const Lab = sequelize.define('Lab', {
 
 // --- 4b. LabSlots ---
 const LabSlot = sequelize.define('LabSlot', {
-  day: { type: DataTypes.ENUM('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'), allowNull: false },
+  day: { type: DataTypes.ENUM('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'), allowNull: false },
   start_time: { type: DataTypes.TIME, allowNull: false },
   end_time: { type: DataTypes.TIME, allowNull: false },
   lab_id: { type: DataTypes.INTEGER, allowNull: false },
@@ -64,7 +64,7 @@ const MinorLab = sequelize.define('MinorLab', {
 
 // --- 5b. MinorLabSlots ---
 const MinorLabSlot = sequelize.define('MinorLabSlot', {
-  day: { type: DataTypes.ENUM('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'), allowNull: false },
+  day: { type: DataTypes.ENUM('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'), allowNull: false },
   start_time: { type: DataTypes.TIME, allowNull: false },
   end_time: { type: DataTypes.TIME, allowNull: false },
   is_unrestricted: { type: DataTypes.BOOLEAN, defaultValue: false }
@@ -74,7 +74,7 @@ const MinorLabSlot = sequelize.define('MinorLabSlot', {
 const TeacherSubject = sequelize.define('TeacherSubject', {
   teacher_id: { type: DataTypes.INTEGER, allowNull: false },
   subject_id: { type: DataTypes.INTEGER, allowNull: false },
-  class_id:   { type: DataTypes.INTEGER, allowNull: true },  // null for minor subjects
+  class_id: { type: DataTypes.INTEGER, allowNull: true },  // null for minor subjects
   type: { type: DataTypes.ENUM('major', 'minor', 'vsc'), allowNull: false }
 }, { timestamps: true, createdAt: 'created_at', updatedAt: false });
 
@@ -195,7 +195,7 @@ const Attendance = sequelize.define('Attendance', {
   date: { type: DataTypes.DATEONLY, allowNull: false },
   status: { type: DataTypes.ENUM('present', 'absent'), allowNull: false, defaultValue: 'absent' },
   lab_id: { type: DataTypes.INTEGER, allowNull: true },
-  minor_lab_id: { type: DataTypes.INTEGER, allowNull: true }, 
+  minor_lab_id: { type: DataTypes.INTEGER, allowNull: true },
   subject_id: { type: DataTypes.INTEGER, allowNull: false }
 }, { timestamps: true, createdAt: 'created_at', updatedAt: 'updated_at' });
 

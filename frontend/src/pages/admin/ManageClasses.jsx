@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Users, ArrowLeft, Calendar } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Users, ArrowLeft, Calendar, CheckSquare, X, CheckCircle2 } from 'lucide-react';
 import api from '../../utils/axios';
 
 const ManageClassLabs = ({ classObj, onBack }) => {
@@ -244,8 +244,12 @@ const ManageClasses = () => {
   const [filterYear, setFilterYear] = useState('');
   const [filterCourse, setFilterCourse] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
-
   const [viewClass, setViewClass] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [showBulkConfirm, setShowBulkConfirm] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
 
   useEffect(() => { fetchData(); }, []);
 
@@ -274,9 +278,35 @@ const ManageClasses = () => {
 
   const handleDelete = async (id) => {
     if (window.confirm('Delete this class? All students assigned to it will lose their class assignment.')) {
-      try { await api.delete(`/admin/classes/${id}`); fetchData(); }
+      try { 
+        await api.delete(`/admin/classes/${id}`); 
+        setSuccessMsg('Class has been deleted successfully.');
+        setShowSuccess(true);
+        fetchData(); 
+      }
       catch (err) { alert(err.response?.data?.error || 'Error deleting class'); }
     }
+  };
+
+  const toggleSelect = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filtered.length && filtered.length > 0) setSelectedIds([]);
+    else setSelectedIds(filtered.map(c => c.id));
+  };
+
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    try {
+      await api.post('/admin/classes/bulk-delete', { ids: selectedIds });
+      const count = selectedIds.length;
+      setSelectedIds([]);
+      setShowBulkConfirm(false);
+      setSuccessMsg(`${count} class${count > 1 ? 'es have' : ' has'} been deleted successfully.`);
+      setShowSuccess(true);
+      fetchData();
+    } catch (err) { alert(err.response?.data?.error || 'Bulk delete failed'); }
+    finally { setBulkDeleting(false); }
   };
 
   const filtered = classes.filter(c => {
@@ -284,13 +314,14 @@ const ManageClasses = () => {
     const matchesYear = filterYear ? c.year === filterYear : true;
     // eslint-disable-next-line eqeqeq
     const matchesCourse = filterCourse ? c.course_id == filterCourse : true;
-    
     const courseObj = courses.find(co => co.id === c.course_id);
     // eslint-disable-next-line eqeqeq
     const matchesDepartment = filterDepartment ? courseObj?.department_id == filterDepartment : true;
-
     return matchesSearch && matchesYear && matchesCourse && matchesDepartment;
   });
+
+  const allSelected = filtered.length > 0 && selectedIds.length === filtered.length;
+  const someSelected = selectedIds.length > 0 && selectedIds.length < filtered.length;
 
   if (viewClass) {
     return <ManageClassLabs classObj={viewClass} onBack={() => { setViewClass(null); fetchData(); }} />;
@@ -349,6 +380,9 @@ const ManageClasses = () => {
             <table className="w-full text-left text-sm whitespace-nowrap min-w-max">
               <thead className="bg-gray-50/80 text-gray-600 font-medium border-b border-gray-100 sticky top-0 z-10">
                 <tr>
+                  <th className="px-4 py-4">
+                    <input type="checkbox" checked={allSelected} ref={el => { if (el) el.indeterminate = someSelected; }} onChange={toggleSelectAll} className="w-4 h-4 rounded border-gray-300 cursor-pointer accent-blue-600" />
+                  </th>
                   <th className="px-6 py-4">Class Name</th>
                   <th className="px-6 py-4">Course</th>
                   <th className="px-6 py-4">Labs</th>
@@ -357,16 +391,19 @@ const ManageClasses = () => {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {loading ? (
-                  <tr><td colSpan="4" className="px-6 py-8 text-center text-gray-500">Loading...</td></tr>
+                  <tr><td colSpan="5" className="px-6 py-8 text-center text-gray-500">Loading...</td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan="4" className="px-6 py-8 text-center text-gray-500">No classes found.</td></tr>
+                  <tr><td colSpan="5" className="px-6 py-8 text-center text-gray-500">No classes found.</td></tr>
                 ) : (
-                  filtered.map((cls) => (
-                    <tr key={cls.id} className="hover:bg-gray-50/50 transition-colors">
+                  filtered.map((cls) => {
+                    const isSelected = selectedIds.includes(cls.id);
+                    return (
+                    <tr key={cls.id} className={`transition-colors ${isSelected ? 'bg-blue-50/60' : 'hover:bg-gray-50/50'}`}>
+                      <td className="px-4 py-4">
+                        <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(cls.id)} className="w-4 h-4 rounded border-gray-300 cursor-pointer accent-blue-600" />
+                      </td>
                       <td className="px-6 py-4 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-teal-100 text-teal-600 flex items-center justify-center font-bold">
-                          <Users className="w-4 h-4" />
-                        </div>
+                        <div className="w-8 h-8 rounded-full bg-teal-100 text-teal-600 flex items-center justify-center font-bold"><Users className="w-4 h-4" /></div>
                         <span className="font-semibold text-gray-900">{cls.name}</span>
                       </td>
                       <td className="px-6 py-4 text-gray-600">{cls.Course?.name || '—'}</td>
@@ -374,21 +411,68 @@ const ManageClasses = () => {
                         <button onClick={() => setViewClass(cls)} className="text-secondary hover:text-cyan-700 hover:underline font-medium">Manage Labs</button>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button onClick={() => { setCurrent({ id: cls.id, year: cls.year || 'FY', course_id: cls.course_id, division: cls.division || '', roll_no_prefix: cls.roll_no_prefix || '' }); setShowModal(true); }} className="p-1.5 text-gray-400 hover:text-primary transition-colors">
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => handleDelete(cls.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors ml-2">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <button onClick={() => { setCurrent({ id: cls.id, year: cls.year || 'FY', course_id: cls.course_id, division: cls.division || '', roll_no_prefix: cls.roll_no_prefix || '' }); setShowModal(true); }} className="p-1.5 text-gray-400 hover:text-primary transition-colors"><Edit className="w-4 h-4" /></button>
+                        <button onClick={() => handleDelete(cls.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors ml-2"><Trash2 className="w-4 h-4" /></button>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
         </div>
       </div>
+
+      {/* Bulk Action Floating Bar */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-gray-900 text-white px-6 py-3 rounded-2xl shadow-2xl">
+          <CheckSquare className="w-5 h-5 text-blue-400" />
+          <span className="font-semibold text-sm">{selectedIds.length} class{selectedIds.length > 1 ? 'es' : ''} selected</span>
+          <button onClick={() => setShowBulkConfirm(true)} className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-sm font-semibold px-4 py-1.5 rounded-xl transition-colors">
+            <Trash2 className="w-4 h-4" /> Delete Selected
+          </button>
+          <button onClick={() => setSelectedIds([])} className="p-1.5 hover:bg-gray-700 rounded-lg"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showBulkConfirm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[99999]">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+            <div className="flex flex-col items-center text-center gap-3 mb-6">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center"><Trash2 className="w-8 h-8 text-red-500" /></div>
+              <h2 className="text-xl font-bold text-gray-900">Delete Classes?</h2>
+              <p className="text-gray-500 text-sm">You are about to permanently delete <strong className="text-gray-900">{selectedIds.length} class{selectedIds.length > 1 ? 'es' : ''}</strong>. Students assigned to them will lose their class. This cannot be undone.</p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setShowBulkConfirm(false)} disabled={bulkDeleting} className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-50">Cancel</button>
+              <button onClick={handleBulkDelete} disabled={bulkDeleting} className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold disabled:opacity-60">
+                {bulkDeleting ? 'Deleting...' : `Yes, Delete ${selectedIds.length}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Modal */}
+      {showSuccess && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100000] animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-8 shadow-2xl flex flex-col items-center text-center transform animate-in zoom-in-95 duration-200">
+            <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-6">
+              <CheckCircle2 className="w-12 h-12 text-emerald-500" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Success!</h2>
+            <p className="text-gray-500 mb-8">{successMsg}</p>
+            <button 
+              onClick={() => setShowSuccess(false)}
+              className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold transition-colors shadow-lg shadow-emerald-200"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[99999]">

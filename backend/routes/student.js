@@ -203,25 +203,31 @@ router.get('/dashboard', async (req, res) => {
     // Minor subjects (if exists)
     const totalSubjects = minorSubjectId ? majorCount + 1 : majorCount;
 
-    // 1. Assignment Count (Active/Incomplete Labs)
-    const allAssignments = await sequelize.query(`
-      SELECT la.id, la.target_labs, aq.id as question_id, sas.id as submission_id
-      FROM "LabAssignments" la
-      JOIN "AssignmentSets" aset ON la.id = aset.assignment_id
-      JOIN "AssignmentQuestions" aq ON aset.id = aq.set_id
-      LEFT JOIN "StudentAssignmentSubmissions" sas ON aq.id = sas.question_id AND sas.student_id = :sid
-      WHERE la.status = 'published' AND (la.class_id = :cid OR la.subject_id = :msid OR EXISTS (
-        SELECT 1 FROM "TeacherSubjects" ts WHERE ts.subject_id = la.subject_id AND ts.class_id = :cid AND ts.type = 'vsc'
-      ))
-    `, { 
-      replacements: { cid: classId, msid: minorSubjectId, sid: req.user.id }, 
-      type: sequelize.QueryTypes.SELECT 
-    });
+    // 1. Get all published assignments and quizzes targeted to this student
+    const [allAssignments, activeQuizzesQuery] = await Promise.all([
+      sequelize.query(`
+        SELECT la.id, la.target_labs, aq.id as question_id, sas.id as submission_id
+        FROM "LabAssignments" la
+        JOIN "AssignmentSets" aset ON la.id = aset.assignment_id
+        JOIN "AssignmentQuestions" aq ON aset.id = aq.set_id
+        LEFT JOIN "StudentAssignmentSubmissions" sas ON aq.id = sas.question_id AND sas.student_id = :sid
+        WHERE la.status = 'published' AND (la.class_id = :cid OR la.subject_id = :msid OR EXISTS (
+          SELECT 1 FROM "TeacherSubjects" ts WHERE ts.subject_id = la.subject_id AND ts.class_id = :cid AND ts.type = 'vsc'
+        ))
+      `, { replacements: { cid: classId, msid: minorSubjectId, sid: req.user.id }, type: sequelize.QueryTypes.SELECT }),
+      sequelize.query(`
+        SELECT q.id, q.target_labs, q.total_marks as max_marks, sqs.id as submission_id, sqs.total_marks as earned_marks
+        FROM "Quizzes" q
+        LEFT JOIN "StudentQuizSubmissions" sqs ON q.id = sqs.quiz_id AND sqs.student_id = :sid
+        WHERE q.status = 'published' AND (q.class_id = :cid OR q.subject_id = :msid OR EXISTS (
+          SELECT 1 FROM "TeacherSubjects" ts WHERE ts.subject_id = q.subject_id AND ts.class_id = :cid AND ts.type = 'vsc'
+        ))
+      `, { replacements: { cid: classId, msid: minorSubjectId, sid: req.user.id }, type: sequelize.QueryTypes.SELECT })
+    ]);
 
-    // Filter by target_labs and find assignments with at least one missing submission
+    // Track active assignments (incomplete ones)
     const assignmentMap = {};
     allAssignments.forEach(row => {
-      // Lab batch filtering
       let targeted = true;
       if (row.target_labs && Array.isArray(row.target_labs) && row.target_labs.length > 0) {
         const labs = row.target_labs.map(String);
@@ -234,7 +240,6 @@ router.get('/dashboard', async (req, res) => {
         if (row.submission_id) assignmentMap[row.id].submitted++;
       }
     });
-
     const activeAssignments = Object.values(assignmentMap).filter(a => a.submitted < a.total).length;
     console.log('[Dashboard] Accurate Active Assignments:', activeAssignments);
 
@@ -255,41 +260,85 @@ router.get('/dashboard', async (req, res) => {
     console.log('[Dashboard] Accurate Note Count:', noteCount);
 
     // 3. Quiz Count (Not yet attempted)
-    const quizzes = await sequelize.query(`
-      SELECT q.id, q.target_labs, sqs.id as submission_id
-      FROM "Quizzes" q
-      LEFT JOIN "StudentQuizSubmissions" sqs ON q.id = sqs.quiz_id AND sqs.student_id = :sid
-      WHERE q.status = 'published' AND (q.class_id = :cid OR q.subject_id = :msid OR EXISTS (
-        SELECT 1 FROM "TeacherSubjects" ts WHERE ts.subject_id = q.subject_id AND ts.class_id = :cid AND ts.type = 'vsc'
-      ))
-      AND sqs.id IS NULL
-    `, { 
-      replacements: { cid: classId, msid: minorSubjectId, sid: req.user.id }, 
-      type: sequelize.QueryTypes.SELECT 
+    // activeQuizzesQuery is already fetched in Step 1
+
+    let quizCount = 0;
+    activeQuizzesQuery.forEach(q => {
+      let targeted = true;
+      if (q.target_labs && Array.isArray(q.target_labs) && q.target_labs.length > 0) {
+        const labs = q.target_labs.map(String);
+        targeted = labs.includes(String(profile.lab_id)) || labs.includes(String(profile.minor_lab_id));
+      }
+      if (targeted && !q.submission_id) {
+        quizCount++;
+      }
     });
 
-    const filteredQuizzes = quizzes.filter(q => {
-      if (!q.target_labs || !Array.isArray(q.target_labs) || q.target_labs.length === 0) return true;
-      const labs = q.target_labs.map(String);
-      return labs.includes(String(profile.lab_id)) || labs.includes(String(profile.minor_lab_id));
-    });
-    const quizCount = filteredQuizzes.length;
     console.log('[Dashboard] Accurate Quiz Count:', quizCount);
 
+    // 4. Calculate Overall Accuracy (Definitive JS-level math with 100% cap)
+    const [labStatsQuery, quizStatsQuery] = await Promise.all([
+      sequelize.query(`
+        SELECT SUM(sub.ai_marks) as earned, SUM(sub.max_marks) as total FROM (
+          SELECT sas.ai_marks, aq.max_marks,
+                 ROW_NUMBER() OVER(PARTITION BY sas.student_id, sas.question_id ORDER BY sas.submitted_at DESC) as rn
+          FROM "StudentAssignmentSubmissions" sas
+          JOIN "AssignmentQuestions" aq ON sas.question_id = aq.id
+          JOIN "AssignmentSets" asets ON aq.set_id = asets."id"
+          JOIN "LabAssignments" la ON asets.assignment_id = la."id"
+          WHERE sas.student_id = :sid
+            AND (la.target_labs IS NULL OR la.target_labs = '[]' 
+                 OR la.target_labs @> jsonb_build_array(:lid)
+                 OR la.target_labs @> jsonb_build_array(CAST(:lid AS TEXT))
+                 OR la.target_labs @> jsonb_build_array(:mlid)
+                 OR la.target_labs @> jsonb_build_array(CAST(:mlid AS TEXT))
+                 OR la.target_labs ? CAST(:lid AS TEXT)
+                 OR la.target_labs ? CAST(:mlid AS TEXT))
+        ) sub WHERE rn = 1
+      `, { replacements: { sid: req.user.id, lid: profile.lab_id, mlid: profile.minor_lab_id || 0 }, type: sequelize.QueryTypes.SELECT }),
+      sequelize.query(`
+        SELECT SUM(sub.quiz_marks) as earned, SUM(sub.quiz_max) as total FROM (
+          SELECT sqs.total_marks as quiz_marks, qz.total_marks as quiz_max,
+                 ROW_NUMBER() OVER(PARTITION BY sqs.student_id, sqs.quiz_id ORDER BY sqs.submitted_at DESC) as rn
+          FROM "StudentQuizSubmissions" sqs
+          JOIN "Quizzes" qz ON sqs.quiz_id = qz."id"
+          WHERE sqs.student_id = :sid
+            AND (qz.target_labs IS NULL OR qz.target_labs = '[]' 
+                 OR qz.target_labs @> jsonb_build_array(:lid)
+                 OR qz.target_labs @> jsonb_build_array(CAST(:lid AS TEXT))
+                 OR qz.target_labs @> jsonb_build_array(:mlid)
+                 OR qz.target_labs @> jsonb_build_array(CAST(:mlid AS TEXT))
+                 OR qz.target_labs ? CAST(:lid AS TEXT)
+                 OR qz.target_labs ? CAST(:mlid AS TEXT))
+        ) sub WHERE rn = 1
+      `, { replacements: { sid: req.user.id, lid: profile.lab_id, mlid: profile.minor_lab_id || 0 }, type: sequelize.QueryTypes.SELECT })
+    ]);
+
+    const labEarned = parseFloat(labStatsQuery[0]?.earned || 0);
+    const labTotal = parseFloat(labStatsQuery[0]?.total || 0);
+    const quizEarned = parseFloat(quizStatsQuery[0]?.earned || 0);
+    const quizTotal = parseFloat(quizStatsQuery[0]?.total || 0);
+
+    const totalEarned = labEarned + quizEarned;
+    const totalPossible = labTotal + quizTotal;
+    const finalAccuracy = totalPossible > 0 ? Math.min(100.0, (totalEarned * 100.0 / totalPossible)) : 0;
+
     const result = {
+      name: req.user.name,
       roll_no: profile.roll_no,
       class_name: profile.Class?.name,
       course_name: profile.Class?.Course?.name,
       minor_subject_name: profile.MinorSubject?.name,
       stats: {
         totalSubjects,
-        activeAssignments: activeAssignments,
+        activeAssignments,
         publishedNotes: noteCount,
-        activeQuizzes: quizCount
+        activeQuizzes: quizCount,
+        overallAccuracy: parseFloat(finalAccuracy.toFixed(1))
       }
     };
     
-    console.log('[Dashboard] Returning:', JSON.stringify(result));
+    console.log(`[Dashboard] Final Accuracy: ${finalAccuracy}% (Earned: ${totalEarned}, Total: ${totalPossible})`);
     res.json(result);
 
   } catch (err) {
@@ -831,78 +880,100 @@ router.get('/leaderboard', async (req, res) => {
         COALESCE(q."quiz_score", 0) as "quiz_score",
         COALESCE(l."lab_max", 0) as "lab_max",
         COALESCE(q."quiz_max", 0) as "quiz_max",
+        -- Standardized Score
         CASE 
           WHEN :taskType = 'lab' THEN COALESCE(l."lab_score", 0)
           WHEN :taskType = 'quiz' THEN COALESCE(q."quiz_score", 0)
           ELSE COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0)
         END as "total_score",
-        CASE
-          WHEN (CASE
-            WHEN :taskType = 'lab' THEN 
-              CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0)::float / l."lab_max") * 100 ELSE 0 END
-            WHEN :taskType = 'quiz' THEN 
-              CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0)::float / q."quiz_max") * 100 ELSE 0 END
-            ELSE
-              CASE WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
-                   THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0))::float / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))) * 100 
-                   ELSE 0 END
-          END) > 100 THEN 100
-          ELSE (CASE
-            WHEN :taskType = 'lab' THEN 
-              CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0)::float / l."lab_max") * 100 ELSE 0 END
-            WHEN :taskType = 'quiz' THEN 
-              CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0)::float / q."quiz_max") * 100 ELSE 0 END
-            ELSE
-              CASE WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
-                   THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0))::float / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))) * 100 
-                   ELSE 0 END
-          END)
+
+
+        -- Standardized Accuracy Calculation
+        CASE 
+          WHEN :taskType = 'lab' THEN 
+            CASE 
+              WHEN COALESCE(l."lab_max", 0) > 0 THEN LEAST(100.0, (COALESCE(l."lab_score", 0) * 100.0 / l."lab_max"))
+              ELSE 0 
+            END
+          WHEN :taskType = 'quiz' THEN 
+            CASE 
+              WHEN COALESCE(q."quiz_max", 0) > 0 THEN LEAST(100.0, (COALESCE(q."quiz_score", 0) * 100.0 / q."quiz_max"))
+              ELSE 0 
+            END
+          ELSE
+            CASE 
+              WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
+                   THEN LEAST(100.0, ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0)) * 100.0 / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))))
+              ELSE 0 
+            END
         END as "accuracy"
+
       FROM "Users" u
       JOIN "StudentProfiles" sp ON u."id" = sp."user_id"
       LEFT JOIN "Classes" c ON sp."class_id" = c."id"
       LEFT JOIN "Courses" cr ON c."course_id" = cr."id"
+      
+      -- Subquery for Labs
       LEFT JOIN (
-        SELECT sub."student_id", SUM(sub."ai_marks") as "lab_score", SUM(sub."max_marks") as "lab_max" FROM (
+        SELECT sub."student_id", COALESCE(SUM(sub."ai_marks"), 0) as "lab_score", COALESCE(SUM(sub."max_marks"), 0) as "lab_max" FROM (
           SELECT sas."student_id", sas."ai_marks", aq."max_marks",
                  ROW_NUMBER() OVER(PARTITION BY sas."student_id", sas."question_id" ORDER BY sas."submitted_at" DESC) as rn
           FROM "StudentAssignmentSubmissions" sas
           JOIN "AssignmentQuestions" aq ON sas."question_id" = aq."id"
           JOIN "AssignmentSets" asets ON aq."set_id" = asets."id"
           JOIN "LabAssignments" la ON asets."assignment_id" = la."id"
+          JOIN "StudentProfiles" sp_inner ON sas."student_id" = sp_inner."user_id"
           WHERE 1=1 ${assignmentFilter}
+          AND (la.target_labs IS NULL OR la.target_labs = '[]' 
+               OR la.target_labs @> jsonb_build_array(sp_inner.lab_id)
+               OR la.target_labs @> jsonb_build_array(CAST(sp_inner.lab_id AS TEXT))
+               OR la.target_labs @> jsonb_build_array(sp_inner.minor_lab_id)
+               OR la.target_labs @> jsonb_build_array(CAST(sp_inner.minor_lab_id AS TEXT))
+               OR la.target_labs ? CAST(sp_inner.lab_id AS TEXT)
+               OR la.target_labs ? CAST(sp_inner.minor_lab_id AS TEXT))
         ) sub WHERE rn = 1
         GROUP BY sub."student_id"
       ) l ON l."student_id" = u."id"
+      
+      -- Subquery for Quizzes
       LEFT JOIN (
-        SELECT sub."student_id", SUM(sub."total_marks") as "quiz_score", SUM(sub."max_marks") as "quiz_max" FROM (
-          SELECT sqs."student_id", sqs."total_marks", qz."total_marks" as "max_marks",
+        SELECT sub."student_id", COALESCE(SUM(sub."quiz_marks"), 0) as "quiz_score", COALESCE(SUM(sub."quiz_max"), 0) as "quiz_max" FROM (
+          SELECT sqs."student_id", sqs."total_marks" as "quiz_marks", qz."total_marks" as "quiz_max",
                  ROW_NUMBER() OVER(PARTITION BY sqs."student_id", sqs."quiz_id" ORDER BY sqs."submitted_at" DESC) as rn
           FROM "StudentQuizSubmissions" sqs
           JOIN "Quizzes" qz ON sqs."quiz_id" = qz."id"
+          JOIN "StudentProfiles" sp_inner ON sqs."student_id" = sp_inner."user_id"
           WHERE 1=1 ${quizFilter}
+          AND (qz.target_labs IS NULL OR qz.target_labs = '[]' 
+               OR qz.target_labs @> jsonb_build_array(sp_inner.lab_id)
+               OR qz.target_labs @> jsonb_build_array(CAST(sp_inner.lab_id AS TEXT))
+               OR qz.target_labs @> jsonb_build_array(sp_inner.minor_lab_id)
+               OR qz.target_labs @> jsonb_build_array(CAST(sp_inner.minor_lab_id AS TEXT))
+               OR qz.target_labs ? CAST(sp_inner.lab_id AS TEXT)
+               OR qz.target_labs ? CAST(sp_inner.minor_lab_id AS TEXT))
         ) sub WHERE rn = 1
         GROUP BY sub."student_id"
       ) q ON q."student_id" = u."id"
+
       WHERE u."role" = 'student' ${whereClause}
       ORDER BY 
         CASE WHEN :sortBy = 'accuracy' THEN 
-          (CASE
+          CASE 
             WHEN :taskType = 'lab' THEN 
-              CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0)::float / l."lab_max") * 100 ELSE 0 END
+              CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0) * 100.0 / l."lab_max") ELSE 0 END
             WHEN :taskType = 'quiz' THEN 
-              CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0)::float / q."quiz_max") * 100 ELSE 0 END
+              CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0) * 100.0 / q."quiz_max") ELSE 0 END
             ELSE
               CASE WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
-                   THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0))::float / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))) * 100 
+                   THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0)) * 100.0 / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)))
                    ELSE 0 END
-          END)
+          END
         ELSE
-          (CASE 
+          CASE 
             WHEN :taskType = 'lab' THEN COALESCE(l."lab_score", 0)
             WHEN :taskType = 'quiz' THEN COALESCE(q."quiz_score", 0)
             ELSE COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0)
-          END)
+          END
         END DESC, 
         u."name" ASC
       LIMIT 100

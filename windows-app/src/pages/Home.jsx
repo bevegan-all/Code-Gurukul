@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, FileCode2, NotebookPen, ClipboardList, Quote, Calendar } from 'lucide-react';
+import { BookOpen, FileCode2, NotebookPen, ClipboardList, Quote, Calendar, Trophy } from 'lucide-react';
 import StudentHeader from '../components/StudentHeader';
 import api from '../api';
 
 const statCards = [
-  { label: 'My Subjects', key: 'totalSubjects', icon: <BookOpen size={28} aria-hidden="true" />, color: 'indigo', desc: 'Assigned automatically via class enrollment', path: '/app/home' }, // Default home shows subjects as well or we can add a subjects page if missing, but usually home has them. Actually windows app doesn't seem to have a dedicated subjects list page? Let's check App.jsx again.
-  { label: 'Active Assignments', key: 'activeAssignments', icon: <FileCode2 size={28} aria-hidden="true" />, color: 'fuchsia', desc: 'Ready to be submitted in the Sandbox Lab', path: '/app/assignments' },
-  { label: 'Published Notes', key: 'publishedNotes', icon: <NotebookPen size={28} aria-hidden="true" />, color: 'emerald', desc: 'Latest study material from your professors', path: '/app/notes' },
-  { label: 'Active Quizzes', key: 'activeQuizzes', icon: <ClipboardList size={28} aria-hidden="true" />, color: 'orange', desc: 'Timed tests to evaluate your knowledge', path: '/app/quizzes' },
+  { label: 'My Subjects', key: 'totalSubjects', icon: <BookOpen size={28} aria-hidden="true" />, color: 'indigo', desc: 'Assigned automatically via enrollment', path: '/app/home' },
+  { label: 'Active Assignments', key: 'activeAssignments', icon: <FileCode2 size={28} aria-hidden="true" />, color: 'fuchsia', desc: 'Ready for Sandbox Lab', path: '/app/assignments' },
+  { label: 'Published Notes', key: 'publishedNotes', icon: <NotebookPen size={28} aria-hidden="true" />, color: 'emerald', desc: 'Latest study material', path: '/app/notes' },
+  { label: 'Active Quizzes', key: 'activeQuizzes', icon: <ClipboardList size={28} aria-hidden="true" />, color: 'orange', desc: 'Timed tests to evaluate knowledge', path: '/app/quizzes' },
+  { label: 'Overall Accuracy', key: 'overallAccuracy', icon: <Trophy size={28} aria-hidden="true" />, color: 'rose', desc: 'Performance across all tasks', path: '/app/leaderboard', suffix: '%' },
 ];
 
 const colorMap = {
@@ -16,6 +17,7 @@ const colorMap = {
   fuchsia: { bg: 'bg-fuchsia-50', text: 'text-fuchsia-600', foot: 'text-fuchsia-600' },
   emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', foot: 'text-emerald-600' },
   orange: { bg: 'bg-orange-50', text: 'text-orange-600', foot: 'text-orange-600' },
+  rose: { bg: 'bg-rose-50', text: 'text-rose-600', foot: 'text-rose-600' },
 };
 
 export default function Home() {
@@ -59,7 +61,7 @@ export default function Home() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 pt-4" role="list" aria-label="Dashboard statistics">
+            <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4 pt-4" role="list" aria-label="Dashboard statistics">
               {statCards.map(card => {
                 const c = colorMap[card.color];
                 const value = data.stats?.[card.key] || 0;
@@ -73,7 +75,7 @@ export default function Home() {
                     <div className="flex justify-between items-start relative z-10">
                       <div>
                         <p className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">{card.label}</p>
-                        <h3 className="text-4xl font-black text-slate-900">{value}</h3>
+                        <h3 className="text-4xl font-black text-slate-900">{value}{card.suffix || ''}</h3>
                       </div>
                       <div className={`p-4 ${c.bg} ${c.text} rounded-xl transition-transform group-hover:scale-110 shadow-sm border border-transparent group-hover:border-slate-100`}>
                         {card.icon}

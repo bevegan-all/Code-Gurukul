@@ -19,15 +19,15 @@ module.exports = (io) => {
     socket.on('student:online', (data) => {
       const sid = String(data.studentId);
       const cid = data.classId ? String(data.classId) : 'none';
-      
+
       console.log(`[Socket] Student Online: ${data.studentName} (ID: ${sid}, Class: ${cid})`);
-      
+
       // Tag socket for automatic offline on disconnect
       socket.studentInfo = data;
       socket.join(`class_${cid}`);
       socket.join(`student_${sid}`);
       studentSocketMap.set(sid, socket.id);
-      
+
       // Notify all rooms the teacher might be in
       const payload = {
         studentId: data.studentId,
@@ -38,17 +38,17 @@ module.exports = (io) => {
         classId: data.classId,
         lastSeen: Date.now()
       };
-      
+
       io.to(`teacher_${cid}`).emit('student:activity', payload);
     });
 
     socket.on('student:ping', (data) => {
       const sid = String(data.studentId);
       const cid = data.classId ? String(data.classId) : 'none';
-      
+
       studentSocketMap.set(sid, socket.id);
-      socket.studentInfo = data; 
-      
+      socket.studentInfo = data;
+
       const payload = {
         studentId: data.studentId,
         studentName: data.studentName,
@@ -58,7 +58,7 @@ module.exports = (io) => {
         classId: data.classId,
         lastSeen: Date.now()
       };
-      
+
       io.to(`teacher_${cid}`).emit('student:activity', payload);
     });
 
@@ -81,9 +81,9 @@ module.exports = (io) => {
       if (socket.studentInfo) {
         const { studentId, studentName, rollNo, classId } = socket.studentInfo;
         const cid = classId ? String(classId) : 'none';
-        
+
         console.log(`[Socket] Student Offline: ${studentName} (ID: ${studentId})`);
-        
+
         const payload = {
           studentId,
           studentName,
@@ -93,7 +93,7 @@ module.exports = (io) => {
           action: 'Disconnected',
           lastSeen: 0
         };
-        
+
         io.to(`teacher_${cid}`).emit('student:activity', payload);
       }
 

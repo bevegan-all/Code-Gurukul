@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Info, FileUp, FileDown, X, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Info, FileUp, FileDown, X, CheckCircle2, AlertCircle, CheckSquare } from 'lucide-react';
 import api from '../../utils/axios';
 
 const ManageStudents = () => {
@@ -12,6 +12,11 @@ const ManageStudents = () => {
   const [importing, setImporting] = useState(false);
   const [importResults, setImportResults] = useState(null);
   const [search, setSearch] = useState('');
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [showBulkConfirm, setShowBulkConfirm] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
 
   const emptyForm = { id: null, name: '', email: '', phone: '', roll_no: '', parent_email: '', parent_phone: '', is_blind: false, is_active: true, class_id: '', minor_subject_id: '', lab_id: '', minor_lab_id: '' };
   const [form, setForm] = useState(emptyForm);
@@ -104,8 +109,42 @@ const ManageStudents = () => {
 
   const handleDelete = async (id) => {
     if (window.confirm('Delete this student permanently?')) {
-      try { await api.delete(`/admin/students/${id}`); fetchAll(); }
+      try { 
+        await api.delete(`/admin/students/${id}`); 
+        setSuccessMsg('Student has been deleted successfully.');
+        setShowSuccess(true);
+        fetchAll(); 
+      }
       catch (err) { alert(err.response?.data?.error || 'Error deleting student'); }
+    }
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filtered.length && filtered.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filtered.map(s => s.id));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    try {
+      const response = await api.post('/admin/students/bulk-delete', { ids: selectedIds });
+      const count = selectedIds.length;
+      setSelectedIds([]);
+      setShowBulkConfirm(false);
+      setSuccessMsg(`${count} student${count > 1 ? 's have' : ' has'} been deleted successfully.`);
+      setShowSuccess(true);
+      fetchAll();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Bulk delete failed');
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -186,6 +225,9 @@ const ManageStudents = () => {
     return matchesSearch && matchesClass && matchesMinor && matchesStatus;
   });
 
+  const allSelected = filtered.length > 0 && selectedIds.length === filtered.length;
+  const someSelected = selectedIds.length > 0 && selectedIds.length < filtered.length;
+
   return (
     <>
       <div className="animate-slide-in space-y-6 flex flex-col h-[calc(100vh-8rem)]">
@@ -244,6 +286,15 @@ const ManageStudents = () => {
             <table className="w-full text-left text-sm whitespace-nowrap min-w-max">
               <thead className="bg-gray-50/80 text-gray-600 font-medium border-b border-gray-100 sticky top-0 z-10">
                 <tr>
+                  <th className="px-4 py-4">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={el => { if (el) el.indeterminate = someSelected; }}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 rounded border-gray-300 text-primary cursor-pointer accent-blue-600"
+                    />
+                  </th>
                   <th className="px-6 py-4">Roll No</th>
                   <th className="px-6 py-4">Name</th>
                   <th className="px-6 py-4">Email</th>
@@ -256,12 +307,22 @@ const ManageStudents = () => {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {loading ? (
-                  <tr><td colSpan="8" className="px-6 py-8 text-center text-gray-500">Loading...</td></tr>
+                  <tr><td colSpan="9" className="px-6 py-8 text-center text-gray-500">Loading...</td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan="8" className="px-6 py-8 text-center text-gray-500">No students found.</td></tr>
+                  <tr><td colSpan="9" className="px-6 py-8 text-center text-gray-500">No students found.</td></tr>
                 ) : (
-                  filtered.map((student) => (
-                    <tr key={student.id} className="hover:bg-gray-50/50 transition-colors">
+                  filtered.map((student) => {
+                    const isSelected = selectedIds.includes(student.id);
+                    return (
+                    <tr key={student.id} className={`transition-colors ${isSelected ? 'bg-blue-50/60' : 'hover:bg-gray-50/50'}`}>
+                      <td className="px-4 py-4">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelect(student.id)}
+                          className="w-4 h-4 rounded border-gray-300 cursor-pointer accent-blue-600"
+                        />
+                      </td>
                       <td className="px-6 py-4 font-mono text-gray-500">{student.StudentProfile?.roll_no || '—'}</td>
                       <td className="px-6 py-4 flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold">{student.name.charAt(0)}</div>
@@ -290,12 +351,82 @@ const ManageStudents = () => {
                         <button onClick={() => handleDelete(student.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors ml-2"><Trash2 className="w-4 h-4" /></button>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
         </div>
+
+        {/* Bulk Action Floating Bar */}
+        {selectedIds.length > 0 && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-gray-900 text-white px-6 py-3 rounded-2xl shadow-2xl animate-in slide-in-from-bottom-4 duration-200">
+            <CheckSquare className="w-5 h-5 text-blue-400" />
+            <span className="font-semibold text-sm">{selectedIds.length} student{selectedIds.length > 1 ? 's' : ''} selected</span>
+            <button
+              onClick={() => setShowBulkConfirm(true)}
+              className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold px-4 py-1.5 rounded-xl transition-colors"
+            >
+              <Trash2 className="w-4 h-4" /> Delete Selected
+            </button>
+            <button onClick={() => setSelectedIds([])} className="p-1.5 hover:bg-gray-700 rounded-lg transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Bulk Delete Confirmation Modal */}
+        {showBulkConfirm && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[99999]">
+            <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+              <div className="flex flex-col items-center text-center gap-3 mb-6">
+                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                  <Trash2 className="w-8 h-8 text-red-500" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900">Delete Students?</h2>
+                <p className="text-gray-500 text-sm">
+                  You are about to permanently delete <strong className="text-gray-900">{selectedIds.length} student{selectedIds.length > 1 ? 's' : ''}</strong>. This action cannot be undone.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowBulkConfirm(false)}
+                  disabled={bulkDeleting}
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleting}
+                  className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold transition-colors disabled:opacity-60"
+                >
+                  {bulkDeleting ? 'Deleting...' : `Yes, Delete ${selectedIds.length}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Success Modal */}
+        {showSuccess && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100000] animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl w-full max-w-sm p-8 shadow-2xl flex flex-col items-center text-center transform animate-in zoom-in-95 duration-200">
+              <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-6">
+                <CheckCircle2 className="w-12 h-12 text-emerald-500" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Success!</h2>
+              <p className="text-gray-500 mb-8">{successMsg}</p>
+              <button 
+                onClick={() => setShowSuccess(false)}
+                className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold transition-colors shadow-lg shadow-emerald-200"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
 
         {showModal && (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center" style={{ zIndex: 9999 }}>

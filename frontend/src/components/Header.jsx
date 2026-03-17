@@ -131,30 +131,54 @@ const Header = () => {
                 <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold">{notifications.length} Items</span>
               </div>
               <div className="max-h-80 overflow-y-auto mt-2 space-y-1 px-2">
-                {notifications.length > 0 ? notifications.map((act) => (
-                  <div key={act.id + (act.type || '')} className="p-3 hover:bg-gray-50 rounded-xl transition-colors flex gap-3 items-start">
-                    <div className={`p-2 rounded-full shrink-0 ${
-                      act.type === 'assignment' ? 'bg-purple-50 text-purple-600' : 
-                      act.type === 'quiz' ? 'bg-orange-50 text-orange-600' :
-                      'bg-blue-50 text-blue-600'
-                    }`}>
-                      {act.type === 'assignment' ? <FileCode2 className="w-4 h-4" /> : 
-                       act.type === 'quiz' ? <ClipboardList className="w-4 h-4" /> :
-                       user.role === 'admin' ? <UserPlus className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                {notifications.length > 0 ? notifications.map((act) => {
+                  const isAdmin = user.role === 'admin';
+                  const timestamp = isAdmin ? act.timestamp : act.created_at;
+                  
+                  // Admin specific fields
+                  const adminAction = act.action_type;
+                  const description = act.description;
+                  const userName = act.User?.name || 'System';
+
+                  return (
+                    <div key={act.id + (act.type || adminAction || '')} className="p-3 hover:bg-gray-50 rounded-xl transition-colors flex gap-3 items-start">
+                      <div className={`p-2 rounded-full shrink-0 ${
+                        isAdmin ? (
+                          adminAction === 'CREATE' ? 'bg-emerald-50 text-emerald-600' :
+                          adminAction === 'UPDATE' ? 'bg-blue-50 text-blue-600' :
+                          adminAction === 'DELETE' ? 'bg-red-50 text-red-600' :
+                          'bg-purple-50 text-purple-600'
+                        ) : (
+                          act.type === 'assignment' ? 'bg-purple-50 text-purple-600' : 
+                          act.type === 'quiz' ? 'bg-orange-50 text-orange-600' :
+                          'bg-blue-50 text-blue-600'
+                        )
+                      }`}>
+                        {isAdmin ? (
+                          adminAction === 'CREATE' ? <UserPlus className="w-4 h-4" /> :
+                          adminAction === 'UPDATE' ? <Clock className="w-4 h-4" /> :
+                          adminAction === 'DELETE' ? <Bell className="w-4 h-4" /> :
+                          <FileCode2 className="w-4 h-4" />
+                        ) : (
+                          act.type === 'assignment' ? <FileCode2 className="w-4 h-4" /> : 
+                          act.type === 'quiz' ? <ClipboardList className="w-4 h-4" /> :
+                          <Clock className="w-4 h-4" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-800 leading-tight break-words">
+                          {isAdmin ? description : act.title}
+                        </p>
+                        <p className="text-[10px] text-gray-500 mt-1 flex items-center justify-between font-medium">
+                          <span className="truncate max-w-[120px]">{isAdmin ? userName : (act.subject || 'System')}</span>
+                          <span className="bg-gray-100 px-1.5 py-0.5 rounded ml-2 flex-shrink-0">
+                            {new Date(timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })} {new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-gray-800 leading-tight">
-                        {act.title}
-                      </p>
-                      <p className="text-[10px] text-gray-500 mt-1 flex items-center justify-between font-medium">
-                        <span className="truncate max-w-[120px]">{act.subject || 'System'}</span>
-                        <span className="bg-gray-100 px-1.5 py-0.5 rounded italic">
-                          {new Date(act.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-                )) : (
+                  );
+                }) : (
                   <div className="text-center py-10 opacity-40">
                     <Bell className="w-10 h-10 mx-auto mb-2" />
                     <p className="text-xs font-bold uppercase tracking-widest">No recent activity</p>

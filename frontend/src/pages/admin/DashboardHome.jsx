@@ -123,24 +123,32 @@ const DashboardHome = () => {
         {/* Recent Activity List */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
           <div className="p-6 border-b border-gray-100 bg-gray-50/50">
-            <h3 className="font-semibold text-gray-800">Recent Onboarding</h3>
+            <h3 className="font-semibold text-gray-800">Admin Activity Feed</h3>
           </div>
           <div className="flex-1 p-6 space-y-6 overflow-y-auto">
-            {recentActivity.length > 0 ? recentActivity.map((activity, idx) => (
-              <div key={activity.id} className="flex gap-4">
-                <div className="mt-1">
-                  <div className="w-2.5 h-2.5 rounded-full bg-primary ring-4 ring-primary/20"></div>
-                  {idx !== recentActivity.length - 1 && <div className="w-0.5 h-full bg-gray-100 mx-auto mt-2"></div>}
+            {recentActivity.length > 0 ? recentActivity.map((activity, idx) => {
+              const actionColor = 
+                activity.action === 'CREATE' ? 'bg-emerald-500' :
+                activity.action === 'UPDATE' ? 'bg-blue-500' :
+                activity.action === 'DELETE' ? 'bg-red-500' : 'bg-primary';
+
+              return (
+                <div key={activity.id + idx} className="flex gap-4">
+                  <div className="mt-1 flex flex-col items-center">
+                    <div className={`w-2.5 h-2.5 rounded-full ${actionColor} ring-4 ring-gray-50 shrink-0`}></div>
+                    {idx !== recentActivity.length - 1 && <div className="w-0.5 grow bg-gray-100 mt-2"></div>}
+                  </div>
+                  <div className="flex-1 pb-4">
+                    <p className="text-sm font-semibold text-gray-800 leading-tight">{activity.description}</p>
+                    <p className="text-xs text-gray-400 mt-1.5 flex flex-col gap-0.5">
+                      <span className="font-medium text-gray-500">by {activity.name}</span>
+                      <span>{new Date(activity.timestamp).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1 pb-4">
-                  <p className="text-sm font-medium text-gray-800">New Student Registered</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {activity.name} • {activity.department_name || 'No Dept'} • {new Date(activity.created_at).toLocaleString()}
-                  </p>
-                </div>
-              </div>
-            )) : (
-              <p className="text-sm text-gray-500 text-center mt-10">No recent onboarding activity.</p>
+              );
+            }) : (
+              <p className="text-sm text-gray-500 text-center mt-10">No recent activity logged.</p>
             )}
           </div>
         </div>

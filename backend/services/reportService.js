@@ -8,7 +8,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY_1 || process.env.GEM
 
 async function generateAIReportSummary(studentData, academicStats, attendanceStats) {
   try {
-    const academicSummary = academicStats.map(a => `${a.subject_name}: Assignments ${Number(a.assignment_avg).toFixed(1)}/10, Quizzes ${Number(a.quiz_avg).toFixed(1)}/10`).join('; ');
+    const academicSummary = academicStats.map(a => `${a.subject_name}: Assignments ${Number(a.assignment_accuracy || 0).toFixed(1)}% Accuracy, Quizzes ${Number(a.quiz_accuracy || 0).toFixed(1)}% Accuracy`).join('; ');
     const attendanceSummary = attendanceStats.map(a => `${a.subject_name}: ${a.present}/${a.total}`).join(', ');
     
     const prompt = `
@@ -104,8 +104,8 @@ async function sendStudentReport(studentId, parentEmail, studentData, academicSt
     doc.rect(startX, currentY, 512, 25).stroke('#e5e7eb');
     doc.fillColor('#374151').font('Helvetica').fontSize(10);
     doc.text(stat.subject_name, startX + 20, currentY + 8);
-    doc.text(`${Number(stat.assignment_avg || 0).toFixed(2)}/10`, startX + 250, currentY + 8);
-    doc.text(`${Number(stat.quiz_avg || 0).toFixed(2)}/10`, startX + 380, currentY + 8);
+    doc.text(`${Number(stat.assignment_accuracy || 0).toFixed(1)}%`, startX + 250, currentY + 8);
+    doc.text(`${Number(stat.quiz_accuracy || 0).toFixed(1)}%`, startX + 380, currentY + 8);
   });
 
   doc.moveDown(3);

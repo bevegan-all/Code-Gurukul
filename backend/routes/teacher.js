@@ -22,7 +22,7 @@ const storage = multer.diskStorage({
   filename: function (req, file, cb) { cb(null, 'labbook-' + Date.now() + path.extname(file.originalname)); }
 });
 
-const excelUpload = multer({ 
+const excelUpload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => cb(null, excelTmpDir),
     filename: (req, file, cb) => cb(null, 'attendance-' + Date.now() + path.extname(file.originalname))
@@ -42,7 +42,7 @@ router.get('/notifications', async (req, res) => {
   try {
     const teacherId = req.user.id;
     const notifications = [];
-    
+
     // Recent lab assignments created by them or for their subjects
     const assigns = await LabAssignment.findAll({
       where: { teacher_id: teacherId },
@@ -77,7 +77,7 @@ router.get('/notifications', async (req, res) => {
     const teacherSubjectsRaw = await TeacherSubject.findAll({ where: { teacher_id: teacherId } });
     const classIds = teacherSubjectsRaw.map(ts => ts.class_id).filter(Boolean);
     const subjectIds = teacherSubjectsRaw.map(ts => ts.subject_id).filter(Boolean);
-    
+
     // Notes created by them OR in their subjects
     const notes = await Note.find({
       $or: [
@@ -300,7 +300,7 @@ router.get('/my-subjects', async (req, res) => {
       )
       ORDER BY s.type, s.name
     `, { replacements: { tid }, type: sequelize.QueryTypes.SELECT });
-    
+
     // De-duplicate: A teacher might be a subject teacher AND a lab teacher for the same subject/class.
     // The query above with DISTINCT and s.id / c.id should handle most cases.
     res.json(rows);
@@ -420,7 +420,7 @@ router.get('/my-students-by-subject/:subjectId', async (req, res) => {
         UNION
         SELECT l.class_id FROM "LabSlots" ls JOIN "Labs" l ON ls.lab_id = l.id WHERE ls.teacher_id = :tid AND ls.subject_id = :sid
       `, { replacements: { tid, sid: subjectId }, type: sequelize.QueryTypes.SELECT });
-      
+
       if (classes.length === 0) return res.json([]);
       const classIds = classes.map(c => c.class_id);
 
@@ -483,7 +483,7 @@ router.get('/assignments', async (req, res) => {
     `, { replacements: { tid }, type: sequelize.QueryTypes.SELECT });
     const subjectIds = accessSubjects.map(s => s.subject_id);
 
-    const rows = assignments.filter(a => 
+    const rows = assignments.filter(a =>
       a.teacher_id === tid || subjectIds.includes(a.subject_id)
     ).map(a => {
       const plain = a.get({ plain: true });
@@ -515,9 +515,9 @@ router.post('/assignments', async (req, res) => {
         const newSet = await AssignmentSet.create({ assignment_id: assignment.id, set_name: set.name });
         if (set.questions && Array.isArray(set.questions)) {
           await AssignmentQuestion.bulkCreate(set.questions.map((q, idx) => ({
-            set_id: newSet.id, 
-            question_text: q.question_text, 
-            expected_code: q.expected_code, 
+            set_id: newSet.id,
+            question_text: q.question_text,
+            expected_code: q.expected_code,
             order_index: idx + 1,
             expected_output: q.expected_output || null,
             max_marks: q.max_marks || 10
@@ -534,9 +534,9 @@ router.post('/assignments', async (req, res) => {
 router.get('/assignments/:id', async (req, res) => {
   try {
     const assignment = await LabAssignment.findByPk(req.params.id, {
-      include: [{ 
-        model: AssignmentSet, 
-        include: [{ model: AssignmentQuestion, order: [['order_index', 'ASC']] }] 
+      include: [{
+        model: AssignmentSet,
+        include: [{ model: AssignmentQuestion, order: [['order_index', 'ASC']] }]
       }]
     });
     res.json(assignment);
@@ -549,8 +549,8 @@ router.put('/assignments/:id', async (req, res) => {
     const { id } = req.params;
     const { title, description, compiler_required, time_limit_minutes, status, target_labs, sets } = req.body;
 
-    await LabAssignment.update({ 
-      title, description, compiler_required, time_limit_minutes, status, target_labs 
+    await LabAssignment.update({
+      title, description, compiler_required, time_limit_minutes, status, target_labs
     }, { where: { id }, transaction: t });
 
     if (sets && Array.isArray(sets)) {
@@ -634,7 +634,7 @@ router.get('/quizzes', async (req, res) => {
     `, { replacements: { tid }, type: sequelize.QueryTypes.SELECT });
     const subjectIds = accessSubjects.map(s => s.subject_id);
 
-    const rows = quizzes.filter(q => 
+    const rows = quizzes.filter(q =>
       q.teacher_id === tid || subjectIds.includes(q.subject_id)
     ).map(q => {
       const plain = q.get({ plain: true });
@@ -680,9 +680,9 @@ router.post('/quizzes', async (req, res) => {
 router.get('/quizzes/:id', async (req, res) => {
   try {
     const quiz = await Quiz.findByPk(req.params.id, {
-      include: [{ 
-        model: QuizQuestion, 
-        include: [{ model: QuizOption }] 
+      include: [{
+        model: QuizQuestion,
+        include: [{ model: QuizOption }]
       }]
     });
     res.json(quiz);
@@ -695,7 +695,7 @@ router.put('/quizzes/:id', async (req, res) => {
     const { id } = req.params;
     const { title, time_limit_minutes, status, target_labs, questions } = req.body;
 
-    await Quiz.update({ 
+    await Quiz.update({
       title, time_limit_minutes, status, target_labs,
       total_marks: (questions?.length || 0)
     }, { where: { id }, transaction: t });
@@ -778,9 +778,9 @@ router.get('/notes', async (req, res) => {
         UNION
         SELECT ml.subject_id FROM "MinorLabSlots" mls JOIN "MinorLabs" ml ON mls.minor_lab_id = ml.id WHERE mls.teacher_id = :tid
     `, { replacements: { tid }, type: sequelize.QueryTypes.SELECT });
-    
+
     const ids = subIds.map(r => r.subject_id);
-    const notes = await Note.find({ 
+    const notes = await Note.find({
       $or: [
         { teacher_id: tid },
         { subject_id: { $in: ids } }
@@ -883,7 +883,7 @@ router.get('/attendance/:subjectId/dates', async (req, res) => {
     // Sort by date asc
     allDates.sort((a, b) => new Date(a.date) - new Date(b.date));
     res.json(allDates);
-  } catch(err) { res.status(500).json({error: err.message}); }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // Get detailed attendance for a specific date and lab
@@ -907,7 +907,7 @@ router.get('/attendance/:subjectId/lab/:labId/date/:date', async (req, res) => {
       ORDER BY sp.roll_no ASC
     `, { replacements, type: sequelize.QueryTypes.SELECT });
     res.json(records);
-  } catch(err) { res.status(500).json({error: err.message}); }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // Toggle a specific attendance record
@@ -918,7 +918,7 @@ router.put('/attendance/:id', async (req, res) => {
     att.status = att.status === 'present' ? 'absent' : 'present';
     await att.save();
     res.json({ success: true, newStatus: att.status });
-  } catch(err) { res.status(500).json({error: err.message}); }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // Take attendance (manually or auto) for a lab session
@@ -926,7 +926,7 @@ router.post('/attendance/take', async (req, res) => {
   try {
     const { subjectId, labId, isMinor, date, students } = req.body; // students: [{ id: userId, present: true/false }]
     const teacherId = req.user.id;
-    
+
     // Check if attendance already exists, if so delete to override
     const whereClause = { subject_id: subjectId, date };
     if (labId && labId !== '0') {
@@ -948,9 +948,9 @@ router.post('/attendance/take', async (req, res) => {
     await Attendance.bulkCreate(records);
 
     res.json({ success: true });
-  } catch(err) { 
+  } catch (err) {
     console.error("ATTENDANCE ROUTE ERROR:", err);
-    res.status(500).json({error: err.message}); 
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -969,7 +969,7 @@ router.post('/attendance/holiday', async (req, res) => {
       res.json({ success: true, is_holiday: false });
     } else {
       await Holiday.create({ ...where, reason: reason || 'Holiday' });
-      
+
       // Auto-create attendance as 'absent' if none exists, so the date persists in the history list even if holiday is removed
       const attCount = await Attendance.count({ where });
       if (attCount === 0) {
@@ -1012,9 +1012,9 @@ router.post('/attendance/holiday', async (req, res) => {
       }
       res.json({ success: true, is_holiday: true });
     }
-  } catch(err) { 
+  } catch (err) {
     console.error("HOLIDAY ERROR:", err);
-    res.status(500).json({error: err.message}); 
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1033,10 +1033,10 @@ router.get('/attendance/excel/export', async (req, res) => {
 
     const [subject] = await sequelize.query(`SELECT name FROM "Subjects" WHERE id = :subjectId`, { replacements: { subjectId }, type: sequelize.QueryTypes.SELECT });
     const teacherName = req.user.name || (await User.findByPk(req.user.id))?.name || 'Instructor';
-    
+
     let labName = 'Theory';
     if (labId && labId !== '0' && labId !== 'null') {
-      const [lab] = isMinor === 'true' 
+      const [lab] = isMinor === 'true'
         ? await sequelize.query(`SELECT name FROM "MinorLabs" WHERE id = :labId`, { replacements: { labId }, type: sequelize.QueryTypes.SELECT })
         : await sequelize.query(`SELECT name FROM "Labs" WHERE id = :labId`, { replacements: { labId }, type: sequelize.QueryTypes.SELECT });
       labName = lab?.name || 'Lab';
@@ -1100,7 +1100,7 @@ router.post('/attendance/excel/import', excelUpload.single('file'), async (req, 
     const workbook = XLSX.readFile(req.file.path);
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
-    
+
     // Extract metadata for validation
     const fileSubjectId = sheet['B4']?.v?.toString();
     const fileLabId = sheet['B5']?.v?.toString();
@@ -1219,7 +1219,7 @@ router.get('/students/:id/attendance', async (req, res) => {
     const total = records.length;
     const present = records.filter(r => r.status === 'present').length;
     res.json({ records, total, present, absent: total - present, percentage: total ? Math.round((present / total) * 100) : 0 });
-  } catch(err) {
+  } catch (err) {
     console.error("STUDENT ATT ERR:", err);
     res.status(500).json({ error: err.message });
   }
@@ -1360,7 +1360,7 @@ router.get('/students/:id/full-details', async (req, res) => {
       SELECT DISTINCT ml.subject_id FROM "MinorLabSlots" mls JOIN "MinorLabs" ml ON mls.minor_lab_id = ml.id WHERE mls.teacher_id = :teacherId
     `, { replacements: { teacherId }, type: sequelize.QueryTypes.SELECT });
     const subjectIds = subjectRows.map(r => r.subject_id);
-    
+
     // 5. Get Attendance History
     let attendance = [];
     if (subjectIds.length > 0) {
@@ -1395,34 +1395,54 @@ router.get('/students/:id/full-details', async (req, res) => {
     const totalAtt = attendance.length;
     const presentAtt = attendance.filter(r => r.status === 'present').length;
 
-    // 7. Aggregate Academic Stats
+    // 7. Aggregate Academic Stats (Now using Accuracy)
     const academicStats = (subjectIds.length > 0) ? await sequelize.query(`
       SELECT s.id as subject_id, s.name as subject_name,
              (
-               SELECT COALESCE(AVG(score_sub.score), 0)
+               SELECT CASE WHEN SUM(sub.max_marks) > 0 THEN (SUM(sub.earned_marks)::float / SUM(sub.max_marks)) * 100 ELSE 0 END
                FROM (
-                 SELECT la.id, COALESCE(SUM(sas.ai_marks), 0) as score
+                 SELECT aq.id, MAX(aq.max_marks) as max_marks, COALESCE(MAX(sas.ai_marks), 0) as earned_marks
                  FROM "LabAssignments" la
                  JOIN "AssignmentSets" aset ON la.id = aset.assignment_id
                  JOIN "AssignmentQuestions" aq ON aset.id = aq.set_id
                  LEFT JOIN "StudentAssignmentSubmissions" sas ON aq.id = sas.question_id AND sas.student_id = :userId
                  WHERE la.subject_id = s.id
-                 GROUP BY la.id
-               ) score_sub
-             ) as assignment_avg,
+                 GROUP BY aq.id
+               ) sub
+             ) as assignment_accuracy,
              (
-               SELECT COALESCE(AVG(sqs.total_marks), 0)
-               FROM "Quizzes" q
-               LEFT JOIN "StudentQuizSubmissions" sqs ON q.id = sqs.quiz_id AND sqs.student_id = :userId
-               WHERE q.subject_id = s.id
-             ) as quiz_avg
+               SELECT CASE WHEN SUM(sub.max_marks) > 0 THEN (SUM(sub.earned_marks)::float / SUM(sub.max_marks)) * 100 ELSE 0 END
+               FROM (
+                 SELECT q.id, MAX(q.total_marks) as max_marks, COALESCE(MAX(sqs.total_marks), 0) as earned_marks
+                 FROM "Quizzes" q
+                 LEFT JOIN "StudentQuizSubmissions" sqs ON q.id = sqs.quiz_id AND sqs.student_id = :userId
+                 WHERE q.subject_id = s.id
+                 GROUP BY q.id
+               ) sub
+             ) as quiz_accuracy
       FROM "Subjects" s
       WHERE s.id IN (:subjectIds)
     `, { replacements: { userId, subjectIds }, type: sequelize.QueryTypes.SELECT }) : [];
 
+    // Calculate Overall Summary Stats
+    let totalMax = 0;
+    let totalEarned = 0;
+
+    assignments.forEach(a => {
+      totalMax += Number(a.max_score || 0);
+      totalEarned += Number(a.total_score || 0);
+    });
+    quizzes.forEach(q => {
+      totalMax += Number(q.max_marks || 0);
+      totalEarned += Number(q.score || 0);
+    });
+
+    const overallAccuracy = totalMax > 0 ? Math.min(100, (totalEarned / totalMax) * 100) : 0;
+
     const stats = {
-      avgAssignment: assignments.length ? assignments.reduce((acc, curr) => acc + Number(curr.total_score), 0) / assignments.length : 0,
-      avgQuiz: quizzes.length ? quizzes.reduce((acc, curr) => acc + Number(curr.score), 0) / quizzes.length : 0,
+      overallAccuracy: overallAccuracy.toFixed(1),
+      avgAssignment: totalMax > 0 ? ((assignments.reduce((acc, curr) => acc + Number(curr.total_score), 0) / Math.max(1, assignments.reduce((acc, curr) => acc + Number(curr.max_score), 0))) * 100).toFixed(1) : "0.0",
+      avgQuiz: totalMax > 0 ? ((quizzes.reduce((acc, curr) => acc + Number(curr.score), 0) / Math.max(1, quizzes.reduce((acc, curr) => acc + Number(curr.max_marks), 0))) * 100).toFixed(1) : "0.0",
       totalSessions: totalAtt,
       presentSessions: presentAtt,
       attPercentage: totalAtt ? Math.round((presentAtt / totalAtt) * 100) : 0,
@@ -1488,7 +1508,7 @@ router.post('/send-student-report', async (req, res) => {
     `, { replacements: { student_id }, type: sequelize.QueryTypes.SELECT });
 
     const result = await sendStudentReport(student_id, parent_email, studentData, academicStats, attendanceStats, teacherName);
-    
+
     await StudentReport.create({
       student_id,
       report_html: `PDF Sent to ${parent_email}`,
@@ -1497,7 +1517,7 @@ router.post('/send-student-report', async (req, res) => {
     });
 
     res.json({ msg: 'Report sent successfully', summary: result.summary });
-  } catch(err) { res.status(500).json({error: err.message}); }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ================= LEADERBOARD =================
@@ -1514,104 +1534,124 @@ router.get('/leaderboard', async (req, res) => {
       whereClause += ' AND cl."id" = :classId';
       replacements.classId = classId;
     } else if (!isGlobal) {
-      // Default to only classes where this teacher is assigned
-      whereClause += ' AND ts."teacher_id" = :teacherId';
+      // Students from classes assigned to this teacher
+      whereClause += ' AND cl."id" IN (SELECT "class_id" FROM "TeacherSubjects" WHERE "teacher_id" = :teacherId)';
     }
 
+    let labSubFilter = "";
+    let quizSubFilter = "";
     if (subjectId) {
-      whereClause += ' AND (la."subject_id" = :subjectId OR qz."subject_id" = :subjectId)';
+      labSubFilter = ' AND la."subject_id" = :subjectId';
+      quizSubFilter = ' AND qz."subject_id" = :subjectId';
       replacements.subjectId = subjectId;
     }
 
     const leaderboardData = await sequelize.query(`
       SELECT 
-        u."id" as "student_id", 
-        u."name" as "student_name",
-        u."profile_image" as "profile_image",
-        u."email" as "student_email",
-        md5(lower(trim(u."email"))) as "gravatar_hash",
-        sp."roll_no",
-        cl."name" as "class_name",
+        u."id" as "student_id", u."name" as "student_name", u."profile_image",
+        u."email" as "student_email", md5(lower(trim(u."email"))) as "gravatar_hash",
+        sp."roll_no", cl."name" as "class_name",
+
+        -- Standardized Score
         CASE 
           WHEN :taskType = 'lab' THEN COALESCE(l."lab_score", 0)
           WHEN :taskType = 'quiz' THEN COALESCE(q."quiz_score", 0)
           ELSE COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0)
         END as "total_score",
-        CASE
-          WHEN (CASE
-            WHEN :taskType = 'lab' THEN 
-              CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0)::float / l."lab_max") * 100 ELSE 0 END
-            WHEN :taskType = 'quiz' THEN 
-              CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0)::float / q."quiz_max") * 100 ELSE 0 END
-            ELSE
-              CASE WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
-                   THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0))::float / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))) * 100 
-                   ELSE 0 END
-          END) > 100 THEN 100
-          ELSE (CASE
-            WHEN :taskType = 'lab' THEN 
-              CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0)::float / l."lab_max") * 100 ELSE 0 END
-            WHEN :taskType = 'quiz' THEN 
-              CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0)::float / q."quiz_max") * 100 ELSE 0 END
-            ELSE
-              CASE WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
-                   THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0))::float / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))) * 100 
-                   ELSE 0 END
-          END)
+
+        -- Standardized Accuracy Calculation
+        CASE 
+          WHEN :taskType = 'lab' THEN 
+            CASE 
+              WHEN COALESCE(l."lab_max", 0) > 0 THEN LEAST(100.0, (COALESCE(l."lab_score", 0) * 100.0 / l."lab_max"))
+              ELSE 0 
+            END
+          WHEN :taskType = 'quiz' THEN 
+            CASE 
+              WHEN COALESCE(q."quiz_max", 0) > 0 THEN LEAST(100.0, (COALESCE(q."quiz_score", 0) * 100.0 / q."quiz_max"))
+              ELSE 0 
+            END
+          ELSE
+            CASE 
+              WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
+                   THEN LEAST(100.0, ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0)) * 100.0 / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))))
+              ELSE 0 
+            END
         END as "accuracy"
+
       FROM "Users" u
       JOIN "StudentProfiles" sp ON u."id" = sp."user_id"
       JOIN "Classes" cl ON cl."id" = sp."class_id"
-      LEFT JOIN "TeacherSubjects" ts ON ts."class_id" = cl."id"
+      
+      -- Subquery for Labs
       LEFT JOIN (
-        SELECT sub."student_id", SUM(sub."ai_marks") as "lab_score", SUM(sub."max_marks") as "lab_max" FROM (
+        SELECT sub."student_id", COALESCE(SUM(sub."ai_marks"), 0) as "lab_score", COALESCE(SUM(sub."max_marks"), 0) as "lab_max" FROM (
           SELECT sas."student_id", sas."ai_marks", aq."max_marks",
                  ROW_NUMBER() OVER(PARTITION BY sas."student_id", sas."question_id" ORDER BY sas."submitted_at" DESC) as rn
           FROM "StudentAssignmentSubmissions" sas
           JOIN "AssignmentQuestions" aq ON sas."question_id" = aq."id"
           JOIN "AssignmentSets" asets ON aq."set_id" = asets."id"
           JOIN "LabAssignments" la ON asets."assignment_id" = la."id"
-          WHERE 1=1
+          JOIN "StudentProfiles" sp_inner ON sas."student_id" = sp_inner."user_id"
+          WHERE 1=1 ${labSubFilter}
+          AND (la.target_labs IS NULL OR la.target_labs = '[]' 
+               OR la.target_labs @> jsonb_build_array(sp_inner.lab_id)
+               OR la.target_labs @> jsonb_build_array(CAST(sp_inner.lab_id AS TEXT))
+               OR la.target_labs @> jsonb_build_array(sp_inner.minor_lab_id)
+               OR la.target_labs @> jsonb_build_array(CAST(sp_inner.minor_lab_id AS TEXT))
+               OR la.target_labs ? CAST(sp_inner.lab_id AS TEXT)
+               OR la.target_labs ? CAST(sp_inner.minor_lab_id AS TEXT))
         ) sub WHERE rn = 1
         GROUP BY sub."student_id"
       ) l ON l."student_id" = u."id"
+      
+      -- Subquery for Quizzes
       LEFT JOIN (
-        SELECT sub."student_id", SUM(sub."total_marks") as "quiz_score", SUM(sub."max_marks") as "quiz_max" FROM (
-          SELECT sqs."student_id", sqs."total_marks", qz."total_marks" as "max_marks",
+        SELECT sub."student_id", COALESCE(SUM(sub."quiz_marks"), 0) as "quiz_score", COALESCE(SUM(sub."quiz_max"), 0) as "quiz_max" FROM (
+          SELECT sqs."student_id", sqs."total_marks" as "quiz_marks", qz."total_marks" as "quiz_max",
                  ROW_NUMBER() OVER(PARTITION BY sqs."student_id", sqs."quiz_id" ORDER BY sqs."submitted_at" DESC) as rn
           FROM "StudentQuizSubmissions" sqs
           JOIN "Quizzes" qz ON sqs."quiz_id" = qz."id"
-          WHERE 1=1
+          JOIN "StudentProfiles" sp_inner ON sqs."student_id" = sp_inner."user_id"
+          WHERE 1=1 ${quizSubFilter}
+          AND (qz.target_labs IS NULL OR qz.target_labs = '[]' 
+               OR qz.target_labs @> jsonb_build_array(sp_inner.lab_id)
+               OR qz.target_labs @> jsonb_build_array(CAST(sp_inner.lab_id AS TEXT))
+               OR qz.target_labs @> jsonb_build_array(sp_inner.minor_lab_id)
+               OR qz.target_labs @> jsonb_build_array(CAST(sp_inner.minor_lab_id AS TEXT))
+               OR qz.target_labs ? CAST(sp_inner.lab_id AS TEXT)
+               OR qz.target_labs ? CAST(sp_inner.minor_lab_id AS TEXT))
         ) sub WHERE rn = 1
         GROUP BY sub."student_id"
       ) q ON q."student_id" = u."id"
+
       WHERE u."role" = 'student' AND u."is_active" = true ${whereClause}
-      GROUP BY u."id", u."name", sp."roll_no", cl."name", l."lab_score", l."lab_max", q."quiz_score", q."quiz_max"
       ORDER BY 
         CASE WHEN :sortBy = 'accuracy' THEN 
-           (CASE
+          CASE 
             WHEN :taskType = 'lab' THEN 
-              CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0)::float / l."lab_max") * 100 ELSE 0 END
+              CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0) * 100.0 / l."lab_max") ELSE 0 END
             WHEN :taskType = 'quiz' THEN 
-              CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0)::float / q."quiz_max") * 100 ELSE 0 END
+              CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0) * 100.0 / q."quiz_max") ELSE 0 END
             ELSE
               CASE WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
-                   THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0))::float / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))) * 100 
+                   THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0)) * 100.0 / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)))
                    ELSE 0 END
-          END)
+          END
         ELSE
-          (CASE 
+          CASE 
             WHEN :taskType = 'lab' THEN COALESCE(l."lab_score", 0)
             WHEN :taskType = 'quiz' THEN COALESCE(q."quiz_score", 0)
             ELSE COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0)
-          END)
-        END DESC, 
+          END
+        END DESC,
         u."name" ASC
+      LIMIT 100
     `, { replacements, type: sequelize.QueryTypes.SELECT });
-
     res.json({ students: leaderboardData });
+
   } catch (err) {
-    console.error('[Teacher Leaderboard] Error:', err);
+    console.error('[Leaderboard] Error:', err);
     res.status(500).json({ error: 'Failed to fetch leaderboard', detail: err.message });
   }
 });

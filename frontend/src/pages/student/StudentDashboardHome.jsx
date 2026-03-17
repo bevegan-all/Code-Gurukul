@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookMarked, FileCode2, NotebookPen, Quote } from 'lucide-react';
+import { BookMarked, FileCode2, NotebookPen, Quote, Trophy, ClipboardList } from 'lucide-react';
 import api from '../../utils/axios';
 
 const StudentDashboardHome = () => {
@@ -50,7 +50,7 @@ const StudentDashboardHome = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div 
           onClick={() => navigate('/student/subjects')}
           className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all cursor-pointer"
@@ -104,7 +104,45 @@ const StudentDashboardHome = () => {
             </div>
           </div>
           <p className="flex items-center gap-1.5 text-[10px] font-black text-emerald-600 mt-6 relative uppercase tracking-tighter">
-            New study resources available
+            Study resources available
+          </p>
+        </div>
+
+        <div 
+          onClick={() => navigate('/student/quizzes')}
+          className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all cursor-pointer"
+        >
+          <div className="absolute -right-6 -top-6 w-24 h-24 bg-orange-50 rounded-full group-hover:scale-125 transition-transform duration-500" />
+          <div className="flex justify-between items-start relative">
+            <div>
+              <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Quizzes</p>
+              <h3 className="text-4xl font-black text-gray-900">{data.stats.activeQuizzes}</h3>
+            </div>
+            <div className="p-3 bg-orange-50 text-orange-600 rounded-2xl shadow-inner">
+              <ClipboardList className="w-6 h-6" />
+            </div>
+          </div>
+          <p className="flex items-center gap-1.5 text-[10px] font-black text-orange-600 mt-6 relative uppercase tracking-tighter">
+            Pending quiz attempts
+          </p>
+        </div>
+
+        <div 
+          onClick={() => navigate('/student/leaderboard')}
+          className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all cursor-pointer"
+        >
+          <div className="absolute -right-6 -top-6 w-24 h-24 bg-rose-50 rounded-full group-hover:scale-125 transition-transform duration-500" />
+          <div className="flex justify-between items-start relative">
+            <div>
+              <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Accuracy</p>
+              <h3 className="text-4xl font-black text-gray-900">{data.stats.overallAccuracy}%</h3>
+            </div>
+            <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl shadow-inner">
+              <Trophy className="w-6 h-6" />
+            </div>
+          </div>
+          <p className="flex items-center gap-1.5 text-[10px] font-black text-rose-600 mt-6 relative uppercase tracking-tighter">
+            Overall performance score
           </p>
         </div>
       </div>

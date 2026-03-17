@@ -19,7 +19,7 @@ const RestrictionManager = () => {
     // The teacher MUST manually click "Unrestrict" during the live session to unlock keys.
 
     // 2. Monitoring & Restriction Socket
-    const socket = io(SOCKET_URL, { 
+    const socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       extraHeaders: { 'ngrok-skip-browser-warning': 'true' },
       reconnection: true,
@@ -73,8 +73,8 @@ const RestrictionManager = () => {
         let dataUrl = null;
         if (window.electronAPI?.getScreenCapture) {
           dataUrl = await window.electronAPI.getScreenCapture();
-        } 
-        
+        }
+
         if (!dataUrl) {
           dataUrl = await toJpeg(document.documentElement, {
             quality: 0.4,
@@ -147,10 +147,10 @@ const RestrictionManager = () => {
       });
       if (pingInterval) clearInterval(pingInterval);
       pingInterval = setInterval(() => {
-        socket.emit('student:ping', { 
-          studentId: user.id, 
-          studentName: user.name, 
-          rollNo: user.roll_no, 
+        socket.emit('student:ping', {
+          studentId: user.id,
+          studentName: user.name,
+          rollNo: user.roll_no,
           classId: user.class_id,
           activity: isCurrentlyIdle ? 'Idle' : 'Active'
         });
@@ -194,10 +194,10 @@ const RestrictionManager = () => {
         </div>
         <div className="flex-1 py-4">
           <h4 className="font-black text-slate-900 text-xl leading-none mb-1 uppercase tracking-tight">Access Granted</h4>
-          <p className="text-slate-500 text-sm font-bold leading-tight">Teacher has unrestricted your session.<br/>You can now use other applications.</p>
+          <p className="text-slate-500 text-sm font-bold leading-tight">Teacher has unrestricted your session.<br />You can now use other applications.</p>
         </div>
-        <button 
-          onClick={() => setShowNotification(false)} 
+        <button
+          onClick={() => setShowNotification(false)}
           className="bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-600 p-2 rounded-full transition-colors"
           aria-label="Dismiss access notification"
         >

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileCode2, BookOpen, NotebookPen, GraduationCap, Plus, Eye, EyeOff, Trash2, X, CheckCircle2, Clock, Download } from 'lucide-react';
+import { ArrowLeft, FileCode2, BookOpen, NotebookPen, GraduationCap, Plus, Eye, EyeOff, Trash2, X, CheckCircle2, Clock, Download, Code2, CheckSquare } from 'lucide-react';
 import api from '../../utils/axios';
 import StudentDetailModal from '../../components/StudentDetailModal';
 import html2pdf from 'html2pdf.js';
@@ -40,8 +40,120 @@ const Badge = ({ status }) => (
   </span>
 );
 
+/* ─────────────── View Assignment Modal ─────────────── */
+const ViewAssignmentModal = ({ assignment, onClose }) => {
+  const [detail, setDetail] = useState(null);
+  useEffect(() => {
+    import('../../utils/axios').then(m => m.default.get(`/teacher/assignments/${assignment.id}`)).then(r => setDetail(r.data));
+  }, [assignment.id]);
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 backdrop-blur-sm overflow-y-auto py-6">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">{assignment.title}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">by {assignment.teacher_name} · <Badge status={assignment.status} /></p>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          {!detail ? <p className="text-gray-400 text-sm animate-pulse">Loading...</p> : (
+            <>
+              <div className="flex gap-4 text-xs text-gray-500">
+                <span className="capitalize font-medium bg-gray-100 px-2 py-1 rounded-lg">{detail.compiler_required}</span>
+                {detail.time_limit_minutes && <span className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-lg"><Clock className="w-3 h-3" />{detail.time_limit_minutes} min</span>}
+              </div>
+              {(detail.AssignmentSets || []).map((set, si) => (
+                <div key={set.id || si}>
+                  <h3 className="font-bold text-gray-700 text-sm mb-2">{set.set_name || `Set ${si+1}`}</h3>
+                  {(set.AssignmentQuestions || []).map((q, qi) => (
+                    <div key={q.id || qi} className="bg-gray-50 rounded-xl p-4 mb-3 border border-gray-100">
+                      <p className="text-sm font-semibold text-gray-800 mb-2">Q{qi+1}. {q.question_text}</p>
+                      {q.expected_code && (
+                        <div>
+                          <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-1 flex items-center gap-1"><Code2 className="w-3 h-3" />Expected Solution</p>
+                          <pre className="bg-gray-900 text-emerald-400 text-xs rounded-lg p-3 overflow-auto whitespace-pre-wrap font-mono">{q.expected_code}</pre>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ─────────────── View Quiz Modal ─────────────── */
+const ViewQuizModal = ({ quiz, onClose }) => {
+  const [detail, setDetail] = useState(null);
+  useEffect(() => {
+    import('../../utils/axios').then(m => m.default.get(`/teacher/quizzes/${quiz.id}`)).then(r => setDetail(r.data));
+  }, [quiz.id]);
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 backdrop-blur-sm overflow-y-auto py-6">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">{quiz.title}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">by {quiz.teacher_name} · <Badge status={quiz.status} /></p>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          {!detail ? <p className="text-gray-400 text-sm animate-pulse">Loading...</p> : (
+            (detail.QuizQuestions || []).map((q, qi) => (
+              <div key={q.id || qi} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                <p className="text-sm font-semibold text-gray-800 mb-3">Q{qi+1}. {q.question_text}</p>
+                <div className="grid grid-cols-1 gap-2">
+                  {(q.QuizOptions || []).map((opt, oi) => (
+                    <div key={opt.id || oi} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border ${
+                      opt.is_correct ? 'border-emerald-400 bg-emerald-50 font-semibold text-emerald-700' : 'border-gray-200 bg-white text-gray-600'
+                    }`}>
+                      {opt.is_correct ? <CheckSquare className="w-4 h-4 text-emerald-500 flex-shrink-0" /> : <span className="w-4 h-4 rounded border border-gray-300 flex-shrink-0" />}
+                      {opt.option_text}
+                      {opt.is_correct && <span className="ml-auto text-[10px] font-bold text-emerald-600 uppercase">✓ Correct</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ─────────────── View Note Modal ─────────────── */
+const ViewNoteModal = ({ note, onClose }) => (
+  <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 backdrop-blur-sm overflow-y-auto py-6">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-4">
+      <div className="flex items-center justify-between p-5 border-b border-gray-100">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">{note.title}</h2>
+          <p className="text-xs text-gray-400 mt-0.5">by {note.teacher_name} · <Badge status={note.status} /></p>
+        </div>
+        <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+      </div>
+      <div className="p-6">
+        <div
+          className="ql-editor prose max-w-none text-sm text-gray-700 leading-relaxed"
+          dangerouslySetInnerHTML={{ __html: note.content_html }}
+        />
+      </div>
+    </div>
+  </div>
+);
+
 /* ─────────────── Assignment mini-form ─────────────── */
 const AssignmentForm = ({ subject, assignment, onSaved, onClose }) => {
+  const SET_NAMES = ['Set A', 'Set B', 'Set C', 'Set D', 'Set E'];
+  const MAX_SETS = 5;
+
   const [form, setForm] = useState({
     title: assignment?.title || '', 
     compiler_required: assignment?.compiler_required || 'java', 
@@ -62,21 +174,46 @@ const AssignmentForm = ({ subject, assignment, onSaved, onClose }) => {
         }))
       : [{ name: 'Set A', questions: [{ question_text: '', expected_code: '' }] }]
   });
+  const [activeSetIdx, setActiveSetIdx] = useState(0);
   const [saving, setSaving] = useState(null); // null | 'draft' | 'published'
 
-  const addQuestion = () => setForm(f => ({
-    ...f,
-    sets: [{ ...f.sets[0], questions: [...f.sets[0].questions, { question_text: '', expected_code: '' }] }]
-  }));
-  const updateQ = (qi, field, val) => setForm(f => {
-    const newQs = [...f.sets[0].questions];
-    newQs[qi] = { ...newQs[qi], [field]: val };
-    return { ...f, sets: [{ ...f.sets[0], questions: newQs }] };
+  const activeSet = form.sets[activeSetIdx] || form.sets[0];
+
+  const addSet = () => {
+    if (form.sets.length >= MAX_SETS) return;
+    const nextName = SET_NAMES[form.sets.length];
+    setForm(f => ({ ...f, sets: [...f.sets, { name: nextName, questions: [{ question_text: '', expected_code: '' }] }] }));
+    setActiveSetIdx(form.sets.length);
+  };
+
+  const removeSet = (idx) => {
+    if (form.sets.length <= 1) return;
+    setForm(f => ({ ...f, sets: f.sets.filter((_, i) => i !== idx) }));
+    setActiveSetIdx(prev => prev >= idx && prev > 0 ? prev - 1 : Math.min(prev, form.sets.length - 2));
+  };
+
+  const addQuestion = () => setForm(f => {
+    const sets = f.sets.map((s, i) => i === activeSetIdx
+      ? { ...s, questions: [...s.questions, { question_text: '', expected_code: '' }] }
+      : s);
+    return { ...f, sets };
   });
-  const removeQ = (qi) => setForm(f => ({
-    ...f,
-    sets: [{ ...f.sets[0], questions: f.sets[0].questions.filter((_, i) => i !== qi) }]
-  }));
+
+  const updateQ = (qi, field, val) => setForm(f => {
+    const sets = f.sets.map((s, i) => {
+      if (i !== activeSetIdx) return s;
+      const questions = s.questions.map((q, j) => j === qi ? { ...q, [field]: val } : q);
+      return { ...s, questions };
+    });
+    return { ...f, sets };
+  });
+
+  const removeQ = (qi) => setForm(f => {
+    const sets = f.sets.map((s, i) => i === activeSetIdx
+      ? { ...s, questions: s.questions.filter((_, j) => j !== qi) }
+      : s);
+    return { ...f, sets };
+  });
 
   const submit = async (e) => {
     e.preventDefault();
@@ -102,14 +239,14 @@ const AssignmentForm = ({ subject, assignment, onSaved, onClose }) => {
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={submit} className="p-5 space-y-4">
-          {/* Row 1 */}
+          {/* Title */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Assignment Title *</label>
             <input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
               placeholder="e.g., Core Java Assignment 1 — OOP Concepts" />
           </div>
-          {/* Row 2 */}
+          {/* Compiler + Time */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Compiler</label>
@@ -129,18 +266,63 @@ const AssignmentForm = ({ subject, assignment, onSaved, onClose }) => {
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" />
             </div>
           </div>
-          {/* Questions */}
+
+          {/* Sets + Questions */}
           <div>
-            <div className="flex items-center justify-between mb-2">
+            {/* Header row: title + buttons */}
+            <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-gray-800 text-sm">Questions</h3>
-              <button type="button" onClick={addQuestion} className="text-xs text-purple-600 hover:underline flex items-center gap-1"><Plus className="w-3 h-3" /> Add Question</button>
+              <div className="flex items-center gap-2">
+                {form.sets.length < MAX_SETS && (
+                  <button type="button" onClick={addSet}
+                    className="text-xs text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg transition-colors">
+                    <Plus className="w-3 h-3" /> Add Set
+                  </button>
+                )}
+                <button type="button" onClick={addQuestion}
+                  className="text-xs text-purple-600 hover:underline flex items-center gap-1">
+                  <Plus className="w-3 h-3" /> Add Question
+                </button>
+              </div>
             </div>
+
+            {/* Set Tabs */}
+            {form.sets.length > 1 && (
+              <div className="flex gap-1 mb-3 flex-wrap">
+                {form.sets.map((s, idx) => (
+                  <div key={idx} className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold cursor-pointer border transition-all ${
+                    idx === activeSetIdx
+                      ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                      : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'
+                  }`}>
+                    <span onClick={() => setActiveSetIdx(idx)}>{s.name}</span>
+                    {form.sets.length > 1 && (
+                      <button type="button" onClick={() => removeSet(idx)}
+                        className={`ml-1 rounded-full hover:bg-black/10 transition-colors ${idx === activeSetIdx ? 'text-white/70 hover:text-white' : 'text-gray-400 hover:text-red-500'}`}>
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Single Set Label when only 1 set */}
+            {form.sets.length === 1 && (
+              <div className="mb-2">
+                <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{form.sets[0].name}</span>
+              </div>
+            )}
+
+            {/* Questions for active set */}
             <div className="space-y-3">
-              {form.sets[0].questions.map((q, qi) => (
+              {activeSet.questions.map((q, qi) => (
                 <div key={qi} className="bg-gray-50 rounded-xl p-3 space-y-2 border border-gray-100">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-gray-500">Q{qi + 1}</span>
-                    {form.sets[0].questions.length > 1 && <button type="button" onClick={() => removeQ(qi)} className="text-red-400 hover:text-red-600"><X className="w-3.5 h-3.5" /></button>}
+                    {activeSet.questions.length > 1 && (
+                      <button type="button" onClick={() => removeQ(qi)} className="text-red-400 hover:text-red-600"><X className="w-3.5 h-3.5" /></button>
+                    )}
                   </div>
                   <textarea required rows={2} value={q.question_text} onChange={e => updateQ(qi, 'question_text', e.target.value)}
                     placeholder="Problem statement / question for the student..."
@@ -152,6 +334,7 @@ const AssignmentForm = ({ subject, assignment, onSaved, onClose }) => {
               ))}
             </div>
           </div>
+
           <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-xl">Cancel</button>
             <div className="flex gap-2">
@@ -501,6 +684,8 @@ const SubjectDetail = () => {
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(window.location.search);
   const classIdFromUrl = queryParams.get('class_id');
+  // Get current teacher id to enforce ownership on edit/publish/delete
+  const currentTeacherId = (() => { try { return JSON.parse(localStorage.getItem('user'))?.id; } catch { return null; } })();
   const [subject, setSubject] = useState(null);
   const [faculties, setFaculties] = useState({ subjectTeacher: '', labs: [] });
   const [tab, setTab] = useState(queryParams.get('tab') || 'assignments');
@@ -515,6 +700,10 @@ const SubjectDetail = () => {
   const [labs, setLabs] = useState([]);
   const [selectedLabId, setSelectedLabId] = useState('');
   const [selectedStudentId, setSelectedStudentId] = useState(null);
+  // View-only modals for non-owner teachers
+  const [viewAssignment, setViewAssignment] = useState(null);
+  const [viewQuiz, setViewQuiz] = useState(null);
+  const [viewNote, setViewNote] = useState(null);
 
   // Attendance states
   const [attendanceDates, setAttendanceDates] = useState([]);
@@ -779,26 +968,39 @@ const SubjectDetail = () => {
                     {a.time_limit_minutes && <><span>·</span><span className="flex items-center gap-1"><Clock className="w-3 h-3" />{a.time_limit_minutes}min</span></>}
                     {a.description && <><span>·</span><span className="line-clamp-1">{a.description}</span></>}
                   </div>
+                  <div className="mt-1 text-[10px] text-gray-400 italic">by {a.teacher_name || 'Unknown'}</div>
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <button 
-                    onClick={async () => {
-                      const res = await api.get(`/teacher/assignments/${a.id}`);
-                      setEditItem(res.data);
-                      setShowForm('assignment');
-                    }}
-                    className="p-2 rounded-lg bg-blue-50 text-blue-500 hover:bg-blue-100 transition-colors"
-                    title="Edit Assignment"
-                  >
-                    <FileCode2 className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => toggleStatus('assignments', a.id, a.status)} title={a.status === 'published' ? 'Unpublish' : 'Publish'}
-                    className={`p-2 rounded-lg transition-colors ${a.status === 'published' ? 'bg-emerald-50 text-emerald-500 hover:bg-emerald-100' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>
-                    {a.status === 'published' ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                  </button>
-                  <button onClick={() => deleteItem('assignments', a.id)} className="p-2 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 transition-colors">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {a.is_mine ? (
+                    <>
+                      <button
+                        onClick={async () => {
+                          const res = await api.get(`/teacher/assignments/${a.id}`);
+                          setEditItem(res.data);
+                          setShowForm('assignment');
+                        }}
+                        className="p-2 rounded-lg bg-blue-50 text-blue-500 hover:bg-blue-100 transition-colors"
+                        title="Edit Assignment"
+                      >
+                        <FileCode2 className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => toggleStatus('assignments', a.id, a.status)} title={a.status === 'published' ? 'Unpublish' : 'Publish'}
+                        className={`p-2 rounded-lg transition-colors ${a.status === 'published' ? 'bg-emerald-50 text-emerald-500 hover:bg-emerald-100' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>
+                        {a.status === 'published' ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                      </button>
+                      <button onClick={() => deleteItem('assignments', a.id)} className="p-2 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setViewAssignment(a)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
+                      title="View assignment with answers"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> View
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -832,26 +1034,39 @@ const SubjectDetail = () => {
                     {q.time_limit_minutes && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{q.time_limit_minutes}min</span>}
                     {q.questions_count > 0 && <><span>·</span><span>{q.questions_count} questions</span></>}
                   </div>
+                  <div className="mt-1 text-[10px] text-gray-400 italic">by {q.teacher_name || 'Unknown'}</div>
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <button 
-                    onClick={async () => {
-                      const res = await api.get(`/teacher/quizzes/${q.id}`);
-                      setEditItem(res.data);
-                      setShowForm('quiz');
-                    }}
-                    className="p-2 rounded-lg bg-blue-50 text-blue-500 hover:bg-blue-100 transition-colors"
-                    title="Edit Quiz"
-                  >
-                    <FileCode2 className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => toggleStatus('quizzes', q.id, q.status)}
-                    className={`p-2 rounded-lg transition-colors ${q.status === 'published' ? 'bg-emerald-50 text-emerald-500 hover:bg-emerald-100' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>
-                    {q.status === 'published' ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                  </button>
-                  <button onClick={() => deleteItem('quizzes', q.id)} className="p-2 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 transition-colors">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {q.is_mine ? (
+                    <>
+                      <button
+                        onClick={async () => {
+                          const res = await api.get(`/teacher/quizzes/${q.id}`);
+                          setEditItem(res.data);
+                          setShowForm('quiz');
+                        }}
+                        className="p-2 rounded-lg bg-blue-50 text-blue-500 hover:bg-blue-100 transition-colors"
+                        title="Edit Quiz"
+                      >
+                        <FileCode2 className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => toggleStatus('quizzes', q.id, q.status)}
+                        className={`p-2 rounded-lg transition-colors ${q.status === 'published' ? 'bg-emerald-50 text-emerald-500 hover:bg-emerald-100' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>
+                        {q.status === 'published' ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                      </button>
+                      <button onClick={() => deleteItem('quizzes', q.id)} className="p-2 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setViewQuiz(q)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
+                      title="View quiz with correct answers"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> View
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -879,16 +1094,29 @@ const SubjectDetail = () => {
                       <Badge status={n.status} />
                       <div className="flex gap-1.5">
                         <button onClick={() => downloadNotePDF(n)} className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100" title="Download PDF"><Download className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => { setEditNote(n); setShowForm('note'); }} className="p-1.5 bg-blue-50 text-blue-500 rounded-lg hover:bg-blue-100"><FileCode2 className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => toggleStatus('notes', n._id, n.status)}
-                          className={`p-1.5 rounded-lg transition-colors ${n.status === 'published' ? 'bg-emerald-50 text-emerald-500 hover:bg-emerald-100' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>
-                          {n.status === 'published' ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                        </button>
-                        <button onClick={() => deleteItem('notes', n._id, true)} className="p-1.5 bg-red-50 text-red-400 rounded-lg hover:bg-red-100 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                        {n.is_mine ? (
+                          <>
+                            <button onClick={() => { setEditNote(n); setShowForm('note'); }} className="p-1.5 bg-blue-50 text-blue-500 rounded-lg hover:bg-blue-100"><FileCode2 className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => toggleStatus('notes', n._id, n.status)}
+                              className={`p-1.5 rounded-lg transition-colors ${n.status === 'published' ? 'bg-emerald-50 text-emerald-500 hover:bg-emerald-100' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>
+                              {n.status === 'published' ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                            </button>
+                            <button onClick={() => deleteItem('notes', n._id, true)} className="p-1.5 bg-red-50 text-red-400 rounded-lg hover:bg-red-100 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => setViewNote(n)}
+                            className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors self-center"
+                            title="View note"
+                          >
+                            <Eye className="w-3 h-3" /> View
+                          </button>
+                        )}
                       </div>
                     </div>
                     <h3 className="font-bold text-gray-900">{n.title}</h3>
                     {n.content_html && <div className="text-xs text-gray-400 mt-1 line-clamp-3" dangerouslySetInnerHTML={{ __html: n.content_html.substring(0, 200) }} />}
+                    <div className="mt-2 text-[10px] text-gray-400 italic">by {n.teacher_name || 'Unknown'}</div>
                     <div className="mt-3 flex justify-end">
                       <button onClick={() => downloadNotePDF(n)} className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 uppercase tracking-wider">
                         <Download className="w-3 h-3" /> Download PDF
@@ -1085,6 +1313,10 @@ const SubjectDetail = () => {
       {showForm === 'assignment' && <AssignmentForm subject={subject} assignment={editItem} onSaved={refetch} onClose={() => { setShowForm(null); setEditItem(null); }} />}
       {showForm === 'quiz' && <QuizForm subject={subject} quiz={editItem} onSaved={refetch} onClose={() => { setShowForm(null); setEditItem(null); }} />}
       {showForm === 'note' && <NoteForm subject={subject} note={editNote} onSaved={refetch} onClose={() => { setShowForm(null); setEditNote(null); }} />}
+      {/* View-only modals */}
+      {viewAssignment && <ViewAssignmentModal assignment={viewAssignment} onClose={() => setViewAssignment(null)} />}
+      {viewQuiz && <ViewQuizModal quiz={viewQuiz} onClose={() => setViewQuiz(null)} />}
+      {viewNote && <ViewNoteModal note={viewNote} onClose={() => setViewNote(null)} />}
 
     </div>
   );

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const requireRole = require('../middleware/roleGuard');
-const { Department, Course, Class, Subject, User, TeacherSubject, StudentProfile, StudentSubject, Lab, LabSlot, MinorLab, MinorLabSlot, sequelize } = require('../models/postgres');
+const { Department, Course, Class, Subject, User, TeacherSubject, StudentProfile, StudentSubject, Lab, LabSlot, MinorLab, MinorLabSlot, ActivityLog, sequelize } = require('../models/postgres');
 const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const emailService = require('../services/emailService');
@@ -14,6 +14,20 @@ const upload = multer({ dest: 'uploads/temp/' });
 
 router.use(auth);
 router.use(requireRole('admin'));
+
+// Helper to log administrative actions
+async function logAdminActivity(userId, type, desc, metadata = {}) {
+  try {
+    await ActivityLog.create({
+      user_id: userId,
+      action_type: type,
+      description: desc,
+      metadata_json: metadata
+    });
+  } catch (err) {
+    console.error('Logging failed:', err);
+  }
+}
 
 // ================= DASHBOARD STATS =================
 router.get('/dashboard-stats', async (req, res) => {
@@ -37,19 +51,21 @@ router.get('/dashboard-stats', async (req, res) => {
       students: parseInt(row.students, 10) || 0
     }));
 
-    const recentActivityRaw = await sequelize.query(`
-      SELECT u.id, u.name, u.created_at, d.name as department_name, cl.name as class_name
-      FROM "Users" u
-      LEFT JOIN "StudentProfiles" sp ON u.id = sp.user_id
-      LEFT JOIN "Classes" cl ON sp.class_id = cl.id
-      LEFT JOIN "Courses" co ON cl.course_id = co.id
-      LEFT JOIN "Departments" d ON co.department_id = d.id
-      WHERE u.role = 'student'
-      ORDER BY u.created_at DESC
-      LIMIT 10
-    `, { type: sequelize.QueryTypes.SELECT });
+    const logs = await ActivityLog.findAll({
+      order: [['timestamp', 'DESC']],
+      limit: 10,
+      include: [{ model: User, attributes: ['name'] }]
+    });
 
-    res.json({ teachers, students, courses, departments, chartData, recentActivity: recentActivityRaw });
+    const recentActivity = logs.map(log => ({
+      id: log.id,
+      name: log.User?.name || 'System',
+      action: log.action_type,
+      description: log.description,
+      timestamp: log.timestamp
+    }));
+
+    res.json({ teachers, students, courses, departments, chartData, recentActivity });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -58,18 +74,12 @@ router.get('/dashboard-stats', async (req, res) => {
 // ================= RECENT ACTIVITY (NOTIFICATIONS) =================
 router.get('/recent-activity', async (req, res) => {
   try {
-    const recentActivityRaw = await sequelize.query(`
-      SELECT u.id, u.name, u.created_at, d.name as department_name, cl.name as class_name
-      FROM "Users" u
-      LEFT JOIN "StudentProfiles" sp ON u.id = sp.user_id
-      LEFT JOIN "Classes" cl ON sp.class_id = cl.id
-      LEFT JOIN "Courses" co ON cl.course_id = co.id
-      LEFT JOIN "Departments" d ON co.department_id = d.id
-      WHERE u.role = 'student'
-      ORDER BY u.created_at DESC
-      LIMIT 10
-    `, { type: sequelize.QueryTypes.SELECT });
-    res.json(recentActivityRaw);
+    const logs = await ActivityLog.findAll({
+      order: [['timestamp', 'DESC']],
+      limit: 15,
+      include: [{ model: User, attributes: ['name', 'profile_image'] }]
+    });
+    res.json(logs);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -97,6 +107,8 @@ router.put('/settings', async (req, res) => {
     
     await user.save();
     
+    await logAdminActivity(req.user.id, 'UPDATE', `Updated Admin Profile Settings`, { name: user.name });
+
     // Optionally return the updated user object to overwrite localStorage
     res.json({
       msg: 'Settings updated successfully',
@@ -121,20 +133,25 @@ router.get('/departments', async (req, res) => {
 router.post('/departments', async (req, res) => {
   try {
     const dept = await Department.create({ name: req.body.name, created_by: req.user.id });
+    await logAdminActivity(req.user.id, 'CREATE', `Created Department: ${dept.name}`, { id: dept.id });
     res.json(dept);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.put('/departments/:id', async (req, res) => {
   try {
-    await Department.update({ name: req.body.name }, { where: { id: req.params.id } });
+    const { name } = req.body;
+    await Department.update({ name }, { where: { id: req.params.id } });
+    await logAdminActivity(req.user.id, 'UPDATE', `Updated Department: ${name}`, { id: req.params.id });
     res.json({ msg: 'Department updated' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.delete('/departments/:id', async (req, res) => {
   try {
+    const dept = await Department.findByPk(req.params.id);
     await Department.destroy({ where: { id: req.params.id } });
+    if (dept) await logAdminActivity(req.user.id, 'DELETE', `Deleted Department: ${dept.name}`, { id: req.params.id });
     res.json({ msg: 'Department deleted' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -150,20 +167,25 @@ router.get('/courses', async (req, res) => {
 router.post('/courses', async (req, res) => {
   try {
     const course = await Course.create({ name: req.body.name, department_id: req.body.department_id });
+    await logAdminActivity(req.user.id, 'CREATE', `Created Course: ${course.name}`, { id: course.id });
     res.json(course);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.put('/courses/:id', async (req, res) => {
   try {
-    await Course.update({ name: req.body.name, department_id: req.body.department_id }, { where: { id: req.params.id } });
+    const { name, department_id } = req.body;
+    await Course.update({ name, department_id }, { where: { id: req.params.id } });
+    await logAdminActivity(req.user.id, 'UPDATE', `Updated Course: ${name}`, { id: req.params.id });
     res.json({ msg: 'Course updated' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.delete('/courses/:id', async (req, res) => {
   try {
+    const course = await Course.findByPk(req.params.id);
     await Course.destroy({ where: { id: req.params.id } });
+    if (course) await logAdminActivity(req.user.id, 'DELETE', `Deleted Course: ${course.name}`, { id: req.params.id });
     res.json({ msg: 'Course deleted' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -184,6 +206,7 @@ router.post('/classes', async (req, res) => {
     
     const name = `${year} ${course.name} ${division}`;
     const cls = await Class.create({ name, year, course_id, division, roll_no_prefix: roll_no_prefix || null });
+    await logAdminActivity(req.user.id, 'CREATE', `Created Class: ${name}`, { id: cls.id });
     res.json(cls);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -196,14 +219,28 @@ router.put('/classes/:id', async (req, res) => {
 
     const name = `${year} ${course.name} ${division}`;
     await Class.update({ name, year, course_id, division, roll_no_prefix: roll_no_prefix || null }, { where: { id: req.params.id } });
+    await logAdminActivity(req.user.id, 'UPDATE', `Updated Class: ${name}`, { id: req.params.id });
     res.json({ msg: 'Class updated' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.delete('/classes/:id', async (req, res) => {
   try {
+    const cls = await Class.findByPk(req.params.id);
     await Class.destroy({ where: { id: req.params.id } });
+    if (cls) await logAdminActivity(req.user.id, 'DELETE', `Deleted Class: ${cls.name}`, { id: req.params.id });
     res.json({ msg: 'Class deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// BULK DELETE CLASSES
+router.post('/classes/bulk-delete', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !ids.length) return res.status(400).json({ error: 'No IDs provided' });
+    const deleted = await Class.destroy({ where: { id: { [Op.in]: ids } } });
+    await logAdminActivity(req.user.id, 'DELETE', `Bulk Deleted ${deleted} class(es)`, { ids });
+    res.json({ msg: `${deleted} class(es) deleted` });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -222,6 +259,7 @@ router.post('/classes/:id/labs', async (req, res) => {
     
     const { name, roll_from, roll_to } = req.body;
     const lab = await Lab.create({ class_id: req.params.id, name, roll_from, roll_to });
+    await logAdminActivity(req.user.id, 'CREATE', `Created Lab: ${name} for Class ID ${req.params.id}`, { lab_id: lab.id });
     res.json(lab);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -230,13 +268,16 @@ router.put('/labs/:id', async (req, res) => {
   try {
     const { name, roll_from, roll_to } = req.body;
     await Lab.update({ name, roll_from, roll_to }, { where: { id: req.params.id } });
+    await logAdminActivity(req.user.id, 'UPDATE', `Updated Lab: ${name}`, { lab_id: req.params.id });
     res.json({ msg: 'Lab updated' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.delete('/labs/:id', async (req, res) => {
   try {
+    const lab = await Lab.findByPk(req.params.id);
     await Lab.destroy({ where: { id: req.params.id } });
+    if (lab) await logAdminActivity(req.user.id, 'DELETE', `Deleted Lab: ${lab.name}`, { lab_id: req.params.id });
     res.json({ msg: 'Lab deleted' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -265,23 +306,7 @@ router.post('/labs/:id/slots', async (req, res) => {
       teacher_id: teacher_id ? parseInt(teacher_id) : null, 
       subject_id: subject_id ? parseInt(subject_id) : null 
     });
-    
-    // Auto-assign teacher to subject for this lab's class (non-blocking)
-    if (teacher_id && subject_id) {
-      try {
-        const lab = await Lab.findByPk(req.params.id);
-        if (lab) {
-          const sub = await Subject.findByPk(subject_id);
-          const assignType = (sub && ['major','minor','vsc'].includes(sub.type)) ? sub.type : 'major';
-          await TeacherSubject.findOrCreate({
-            where: { teacher_id: parseInt(teacher_id), subject_id: parseInt(subject_id), class_id: lab.class_id, type: assignType }
-          });
-        }
-      } catch (assignErr) {
-        console.error('Warning: Could not auto-assign teacher to subject:', assignErr.message);
-      }
-    }
-
+    // Lab instructors are tracked via LabSlots only — no TeacherSubject record needed.
     res.json(slot);
   } catch (err) {
     console.error('ERROR SAVING SLOT:', err);
@@ -298,26 +323,7 @@ router.put('/lab-slots/:id', async (req, res) => {
       teacher_id: teacher_id ? parseInt(teacher_id) : null, 
       subject_id: subject_id ? parseInt(subject_id) : null 
     }, { where: { id: req.params.id } });
-    
-    // Auto-assign teacher to subject for this lab's class (non-blocking)
-    if (teacher_id && subject_id) {
-      try {
-        const slot = await LabSlot.findByPk(req.params.id);
-        if (slot) {
-          const lab = await Lab.findByPk(slot.lab_id);
-          if (lab) {
-             const sub = await Subject.findByPk(subject_id);
-             const assignType = (sub && ['major','minor','vsc'].includes(sub.type)) ? sub.type : 'major';
-             await TeacherSubject.findOrCreate({
-               where: { teacher_id: parseInt(teacher_id), subject_id: parseInt(subject_id), class_id: lab.class_id, type: assignType }
-             });
-          }
-        }
-      } catch (assignErr) {
-        console.error('Warning: Could not auto-assign teacher to subject:', assignErr.message);
-      }
-    }
-
+    // Lab instructors are tracked via LabSlots only — no TeacherSubject record needed.
     res.json({ msg: 'Slot updated' });
   } catch (err) {
     console.error('ERROR UPDATING SLOT:', err);
@@ -350,27 +356,41 @@ router.post('/subjects', async (req, res) => {
       department_id: req.body.type === 'minor' ? null : req.body.department_id,
       course_id: req.body.type === 'minor' ? null : req.body.course_id 
     });
+    await logAdminActivity(req.user.id, 'CREATE', `Created Subject: ${sub.name} (${sub.type})`, { id: sub.id });
     res.json(sub);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.put('/subjects/:id', async (req, res) => {
   try {
+    const { name, type, year, department_id, course_id } = req.body;
     await Subject.update({ 
-      name: req.body.name, 
-      type: req.body.type,
-      year: req.body.year || 'FY',
-      department_id: req.body.type === 'minor' ? null : req.body.department_id,
-      course_id: req.body.type === 'minor' ? null : req.body.course_id 
+      name, type, year: year || 'FY',
+      department_id: type === 'minor' ? null : department_id,
+      course_id: type === 'minor' ? null : course_id 
     }, { where: { id: req.params.id } });
+    await logAdminActivity(req.user.id, 'UPDATE', `Updated Subject: ${name}`, { id: req.params.id });
     res.json({ msg: 'Subject updated' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.delete('/subjects/:id', async (req, res) => {
   try {
+    const sub = await Subject.findByPk(req.params.id);
     await Subject.destroy({ where: { id: req.params.id } });
+    if (sub) await logAdminActivity(req.user.id, 'DELETE', `Deleted Subject: ${sub.name}`, { id: req.params.id });
     res.json({ msg: 'Subject deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// BULK DELETE SUBJECTS
+router.post('/subjects/bulk-delete', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !ids.length) return res.status(400).json({ error: 'No IDs provided' });
+    const deleted = await Subject.destroy({ where: { id: { [Op.in]: ids } } });
+    await logAdminActivity(req.user.id, 'DELETE', `Bulk Deleted ${deleted} subject(s)`, { ids });
+    res.json({ msg: `${deleted} subject(s) deleted` });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -419,16 +439,7 @@ router.post('/minor-labs/:id/slots', async (req, res) => {
   try {
     const { day, start_time, end_time, teacher_id } = req.body;
     const slot = await MinorLabSlot.create({ minor_lab_id: req.params.id, day, start_time, end_time, teacher_id });
-    
-    if (teacher_id) {
-      const minorLab = await MinorLab.findByPk(req.params.id);
-      if (minorLab) {
-        await TeacherSubject.findOrCreate({
-          where: { teacher_id, subject_id: minorLab.subject_id, class_id: null, type: 'minor' }
-        });
-      }
-    }
-
+    // Minor lab instructors are tracked via MinorLabSlots only — no TeacherSubject record needed.
     res.json(slot);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -437,19 +448,7 @@ router.put('/minor-lab-slots/:id', async (req, res) => {
   try {
     const { day, start_time, end_time, teacher_id } = req.body;
     await MinorLabSlot.update({ day, start_time, end_time, teacher_id }, { where: { id: req.params.id } });
-    
-    if (teacher_id) {
-      const slot = await MinorLabSlot.findByPk(req.params.id);
-      if (slot) {
-        const minorLab = await MinorLab.findByPk(slot.minor_lab_id);
-        if (minorLab) {
-          await TeacherSubject.findOrCreate({
-            where: { teacher_id, subject_id: minorLab.subject_id, class_id: null, type: 'minor' }
-          });
-        }
-      }
-    }
-
+    // Minor lab instructors are tracked via MinorLabSlots only — no TeacherSubject record needed.
     res.json({ msg: 'Slot updated' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -471,6 +470,7 @@ router.get('/teachers', async (req, res) => {
       raw: true
     });
 
+    // Subject teacher assignments (Major + Minor only, assigned via Manage Teachers)
     const [assignments] = await sequelize.query(`
       SELECT ts.teacher_id, ts.subject_id, ts.class_id, ts.type,
              s.name AS subject_name,
@@ -480,16 +480,67 @@ router.get('/teachers', async (req, res) => {
       LEFT JOIN "Classes" cl ON ts.class_id = cl.id
     `);
 
-    const result = teachers.map(t => ({
-      ...t,
-      TeacherSubjects: assignments.filter(a => a.teacher_id === t.id).map(a => ({
-        type: a.type,
-        subject_id: a.subject_id,
-        class_id: a.class_id,
-        Subject: { name: a.subject_name },
-        Class: a.class_id ? { name: a.class_name } : null
-      }))
-    }));
+    // Lab instructor assignments (from LabSlots + MinorLabSlots, assigned via Manage Classes)
+    const [labSlotRows] = await sequelize.query(`
+      SELECT ls.teacher_id,
+             l.name AS lab_name,
+             c.name AS class_name,
+             s.name AS subject_name,
+             ls.day,
+             'major' AS slot_type
+      FROM "LabSlots" ls
+      JOIN "Labs" l ON ls.lab_id = l.id
+      JOIN "Classes" c ON l.class_id = c.id
+      LEFT JOIN "Subjects" s ON ls.subject_id = s.id
+      WHERE ls.teacher_id IS NOT NULL
+    `);
+
+    const [minorSlotRows] = await sequelize.query(`
+      SELECT mls.teacher_id,
+             ml.name AS lab_name,
+             s.name AS subject_name,
+             mls.day,
+             'minor' AS slot_type,
+             NULL AS class_name
+      FROM "MinorLabSlots" mls
+      JOIN "MinorLabs" ml ON mls.minor_lab_id = ml.id
+      JOIN "Subjects" s ON ml.subject_id = s.id
+      WHERE mls.teacher_id IS NOT NULL
+    `);
+
+    const allLabSlots = [...labSlotRows, ...minorSlotRows];
+
+    const result = teachers.map(t => {
+      // Build compact label: "E3 Core Java Lab1 Mon" or "Minor AIML M1 Tue"
+      const labAssignments = allLabSlots
+        .filter(ls => ls.teacher_id === t.id)
+        .map(ls => {
+          if (ls.slot_type === 'major') {
+            // Format: "ClassName Lab SubjectName Day" → "E3 Core Java Lab1 Mon"
+            const clsPart = ls.class_name ? ls.class_name.split(' ').pop() : ''; // e.g. E3 from "SY BCA E3"
+            const subPart = ls.subject_name ? ls.subject_name.replace(/\s+/g, ' ').substring(0, 12) : '';
+            const dayPart = ls.day ? ls.day.substring(0, 3) : '';
+            return `${clsPart} ${subPart} ${ls.lab_name} ${dayPart}`.trim();
+          } else {
+            // Format: "AIML M1 Mon"
+            const subPart = ls.subject_name ? ls.subject_name.substring(0, 10) : '';
+            const dayPart = ls.day ? ls.day.substring(0, 3) : '';
+            return `Minor ${subPart} ${ls.lab_name} ${dayPart}`.trim();
+          }
+        });
+
+      return {
+        ...t,
+        TeacherSubjects: assignments.filter(a => a.teacher_id === t.id).map(a => ({
+          type: a.type,
+          subject_id: a.subject_id,
+          class_id: a.class_id,
+          Subject: { name: a.subject_name },
+          Class: a.class_id ? { name: a.class_name } : null
+        })),
+        labAssignments  // compact labels array for the admin table column
+      };
+    });
 
     res.json(result);
   } catch (err) {
@@ -502,7 +553,7 @@ router.post('/teachers', async (req, res) => {
   try {
     const { name, email, phone, major_assignments, minor_subject_id, department_id } = req.body;
     
-    const defaultPassword = 'Teacher@123';
+    const defaultPassword = 'teacher123';
     const password_hash = await bcrypt.hash(defaultPassword, 10);
     const teacher = await User.create({ 
       name, email, phone: phone || null, password_hash, role: 'teacher', department_id: department_id || null 
@@ -522,6 +573,7 @@ router.post('/teachers', async (req, res) => {
     }
 
     await t.commit();
+    await logAdminActivity(req.user.id, 'CREATE', `Created Teacher: ${name} (${email})`, { id: teacher.id });
 
     emailService.sendWelcomeEmail(email, name, 'teacher', defaultPassword)
       .catch(err => console.error('Teacher welcome email failed:', err.message));
@@ -559,14 +611,28 @@ router.put('/teachers/:id', async (req, res) => {
     }
 
     await t.commit();
+    await logAdminActivity(req.user.id, 'UPDATE', `Updated Teacher: ${name}`, { id: req.params.id });
     res.json({ msg: 'Teacher updated' });
   } catch (err) { await t.rollback(); res.status(500).json({ error: err.message }); }
 });
 
 router.delete('/teachers/:id', async (req, res) => {
   try {
+    const teacher = await User.findOne({ where: { id: req.params.id, role: 'teacher' } });
     await User.destroy({ where: { id: req.params.id, role: 'teacher' } });
+    if (teacher) await logAdminActivity(req.user.id, 'DELETE', `Deleted Teacher: ${teacher.name}`, { id: req.params.id });
     res.json({ msg: 'Teacher deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// BULK DELETE TEACHERS
+router.post('/teachers/bulk-delete', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !ids.length) return res.status(400).json({ error: 'No IDs provided' });
+    const deleted = await User.destroy({ where: { id: { [Op.in]: ids }, role: 'teacher' } });
+    await logAdminActivity(req.user.id, 'DELETE', `Bulk Deleted ${deleted} teacher(s)`, { ids });
+    res.json({ msg: `${deleted} teacher(s) deleted` });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -666,6 +732,7 @@ router.post('/students', async (req, res) => {
     }
 
     await t.commit();
+    await logAdminActivity(req.user.id, 'CREATE', `Created Student: ${name} (${roll_no})`, { id: student.id });
 
     emailService.sendWelcomeEmail(email, name, 'student', defaultPassword, roll_no || null)
       .catch(err => console.error('Student welcome email failed:', err.message));
@@ -727,14 +794,28 @@ router.put('/students/:id', async (req, res) => {
     }
 
     await t.commit();
+    await logAdminActivity(req.user.id, 'UPDATE', `Updated Student: ${name}`, { id: req.params.id });
     res.json({ msg: 'Student updated' });
   } catch (err) { await t.rollback(); res.status(500).json({ error: err.message }); }
 });
 
 router.delete('/students/:id', async (req, res) => {
   try {
+    const student = await User.findOne({ where: { id: req.params.id, role: 'student' } });
     await User.destroy({ where: { id: req.params.id, role: 'student' } });
+    if (student) await logAdminActivity(req.user.id, 'DELETE', `Deleted Student: ${student.name}`, { id: req.params.id });
     res.json({ msg: 'Student deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// BULK DELETE STUDENTS
+router.post('/students/bulk-delete', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !ids.length) return res.status(400).json({ error: 'No IDs provided' });
+    const deleted = await User.destroy({ where: { id: { [Op.in]: ids }, role: 'student' } });
+    await logAdminActivity(req.user.id, 'DELETE', `Bulk Deleted ${deleted} student(s)`, { ids });
+    res.json({ msg: `${deleted} student(s) deleted` });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -902,7 +983,8 @@ router.post('/students/import', upload.single('file'), async (req, res) => {
 
     await t.commit();
     fs.unlinkSync(req.file.path);
-    res.json({ success: true, imported: successCount, skipped, errors });
+    await logAdminActivity(req.user.id, 'IMPORT', `Imported ${successCount} students via Excel`, { success: successCount, skipped: skipped.length, errors: errors.length });
+    res.json({ message: 'Import complete', successCount, skipped, errors });
   } catch (err) {
     await t.rollback();
     if (req.file) fs.unlinkSync(req.file.path);
@@ -924,7 +1006,7 @@ router.get('/leaderboard-filters', async (req, res) => {
 
 router.get('/leaderboard', async (req, res) => {
   try {
-    const { taskType = 'both', sortBy = 'accuracy', departmentId, courseId, classId } = req.query;
+    const { taskType = 'both', sortBy = 'accuracy', departmentId, courseId, classId, subjectId } = req.query;
     const replacements = { taskType, sortBy };
 
     let whereClause = "";
@@ -939,6 +1021,14 @@ router.get('/leaderboard', async (req, res) => {
       replacements.deptId = departmentId;
     }
 
+    let labSubFilter = "";
+    let quizSubFilter = "";
+    if (subjectId) {
+      labSubFilter = ' AND la."subject_id" = :subjectId';
+      quizSubFilter = ' AND qz."subject_id" = :subjectId';
+      replacements.subjectId = subjectId;
+    }
+
     const leaderboardData = await sequelize.query(`
       SELECT 
         u."id" as "student_id", 
@@ -948,68 +1038,102 @@ router.get('/leaderboard', async (req, res) => {
         md5(lower(trim(u."email"))) as "gravatar_hash",
         sp."roll_no",
         cl."name" as "class_name",
+
+        -- Standardized Score
         CASE 
           WHEN :taskType = 'lab' THEN COALESCE(l."lab_score", 0)
           WHEN :taskType = 'quiz' THEN COALESCE(q."quiz_score", 0)
           ELSE COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0)
         END as "total_score",
-        LEAST(CASE
+
+        -- Standardized Accuracy Calculation
+        CASE 
           WHEN :taskType = 'lab' THEN 
-            CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0)::float / l."lab_max") * 100 ELSE 0 END
+            CASE 
+              WHEN COALESCE(l."lab_max", 0) > 0 THEN LEAST(100.0, (COALESCE(l."lab_score", 0) * 100.0 / l."lab_max"))
+              ELSE 0 
+            END
           WHEN :taskType = 'quiz' THEN 
-            CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0)::float / q."quiz_max") * 100 ELSE 0 END
+            CASE 
+              WHEN COALESCE(q."quiz_max", 0) > 0 THEN LEAST(100.0, (COALESCE(q."quiz_score", 0) * 100.0 / q."quiz_max"))
+              ELSE 0 
+            END
           ELSE
-            CASE WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
-                 THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0))::float / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))) * 100 
-                 ELSE 0 END
-        END, 100) as "accuracy"
+            CASE 
+              WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
+                   THEN LEAST(100.0, ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0)) * 100.0 / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))))
+              ELSE 0 
+            END
+        END as "accuracy"
+
       FROM "Users" u
       JOIN "StudentProfiles" sp ON u."id" = sp."user_id"
       LEFT JOIN "Classes" cl ON cl."id" = sp."class_id"
       LEFT JOIN "Courses" cr ON cl."course_id" = cr."id"
       LEFT JOIN "Departments" d ON cr."department_id" = d."id"
+      
+      -- Subquery for Labs
       LEFT JOIN (
-        SELECT sub."student_id", SUM(sub."ai_marks") as "lab_score", SUM(sub."max_marks") as "lab_max" FROM (
+        SELECT sub."student_id", COALESCE(SUM(sub."ai_marks"), 0) as "lab_score", COALESCE(SUM(sub."max_marks"), 0) as "lab_max" FROM (
           SELECT sas."student_id", sas."ai_marks", aq."max_marks",
                  ROW_NUMBER() OVER(PARTITION BY sas."student_id", sas."question_id" ORDER BY sas."submitted_at" DESC) as rn
           FROM "StudentAssignmentSubmissions" sas
           JOIN "AssignmentQuestions" aq ON sas."question_id" = aq."id"
           JOIN "AssignmentSets" asets ON aq."set_id" = asets."id"
           JOIN "LabAssignments" la ON asets."assignment_id" = la."id"
-          WHERE 1=1
+          JOIN "StudentProfiles" sp_inner ON sas."student_id" = sp_inner."user_id"
+          WHERE 1=1 ${labSubFilter}
+          AND (la.target_labs IS NULL OR la.target_labs = '[]' 
+               OR la.target_labs @> jsonb_build_array(sp_inner.lab_id)
+               OR la.target_labs @> jsonb_build_array(CAST(sp_inner.lab_id AS TEXT))
+               OR la.target_labs @> jsonb_build_array(sp_inner.minor_lab_id)
+               OR la.target_labs @> jsonb_build_array(CAST(sp_inner.minor_lab_id AS TEXT))
+               OR la.target_labs ? CAST(sp_inner.lab_id AS TEXT)
+               OR la.target_labs ? CAST(sp_inner.minor_lab_id AS TEXT))
         ) sub WHERE rn = 1
         GROUP BY sub."student_id"
       ) l ON l."student_id" = u."id"
+      
+      -- Subquery for Quizzes
       LEFT JOIN (
-        SELECT sub."student_id", SUM(sub."total_marks") as "quiz_score", SUM(sub."max_marks") as "quiz_max" FROM (
-          SELECT sqs."student_id", sqs."total_marks", qz."total_marks" as "max_marks",
+        SELECT sub."student_id", COALESCE(SUM(sub."quiz_marks"), 0) as "quiz_score", COALESCE(SUM(sub."quiz_max"), 0) as "quiz_max" FROM (
+          SELECT sqs."student_id", sqs."total_marks" as "quiz_marks", qz."total_marks" as "quiz_max",
                  ROW_NUMBER() OVER(PARTITION BY sqs."student_id", sqs."quiz_id" ORDER BY sqs."submitted_at" DESC) as rn
           FROM "StudentQuizSubmissions" sqs
           JOIN "Quizzes" qz ON sqs."quiz_id" = qz."id"
-          WHERE 1=1
+          JOIN "StudentProfiles" sp_inner ON sqs."student_id" = sp_inner."user_id"
+          WHERE 1=1 ${quizSubFilter}
+          AND (qz.target_labs IS NULL OR qz.target_labs = '[]' 
+               OR qz.target_labs @> jsonb_build_array(sp_inner.lab_id)
+               OR qz.target_labs @> jsonb_build_array(CAST(sp_inner.lab_id AS TEXT))
+               OR qz.target_labs @> jsonb_build_array(sp_inner.minor_lab_id)
+               OR qz.target_labs @> jsonb_build_array(CAST(sp_inner.minor_lab_id AS TEXT))
+               OR qz.target_labs ? CAST(sp_inner.lab_id AS TEXT)
+               OR qz.target_labs ? CAST(sp_inner.minor_lab_id AS TEXT))
         ) sub WHERE rn = 1
         GROUP BY sub."student_id"
       ) q ON q."student_id" = u."id"
-      WHERE u."role" = 'student' AND u."is_active" = true ${whereClause}
+
+      WHERE u."role" = 'student' ${whereClause}
       ORDER BY 
         CASE WHEN :sortBy = 'accuracy' THEN 
-           (CASE
+          CASE 
             WHEN :taskType = 'lab' THEN 
-              CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0)::float / l."lab_max") * 100 ELSE 0 END
+              CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0) * 100.0 / l."lab_max") ELSE 0 END
             WHEN :taskType = 'quiz' THEN 
-              CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0)::float / q."quiz_max") * 100 ELSE 0 END
+              CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0) * 100.0 / q."quiz_max") ELSE 0 END
             ELSE
               CASE WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
-                   THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0))::float / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))) * 100 
+                   THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0)) * 100.0 / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)))
                    ELSE 0 END
-          END)
+          END
         ELSE
-          (CASE 
+          CASE 
             WHEN :taskType = 'lab' THEN COALESCE(l."lab_score", 0)
             WHEN :taskType = 'quiz' THEN COALESCE(q."quiz_score", 0)
             ELSE COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0)
-          END)
-        END DESC, 
+          END
+        END DESC,
         u."name" ASC
       LIMIT 100
     `, { replacements, type: sequelize.QueryTypes.SELECT });
