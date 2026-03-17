@@ -60,7 +60,13 @@ const Login = () => {
       });
       google.accounts.id.renderButton(
         document.getElementById("googleBtn"),
-        { theme: "outline", size: "large", width: "100%", text: "continue_with" }
+        { 
+          theme: "filled_blue", 
+          size: "large", 
+          width: 384, // Approximate width of the container minus padding
+          shape: "rectangular",
+          text: "continue_with" 
+        }
       );
     }
   }, []);
@@ -144,7 +150,9 @@ const Login = () => {
           <div className="flex-1 h-px bg-gray-200"></div>
         </div>
 
-        <div id="googleBtn" className="w-full h-[44px] overflow-hidden rounded-lg"></div>
+        <div className="flex justify-center">
+          <div id="googleBtn" className="w-full min-h-[44px] flex justify-center"></div>
+        </div>
       </div>
     </div>
   );
