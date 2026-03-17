@@ -16,6 +16,9 @@ router.get('/', async (req, res) => {
       SELECT 
         u."id" as "student_id", 
         u."name" as "student_name",
+        u."profile_image" as "profile_image",
+        u."email" as "student_email",
+        md5(lower(trim(u."email"))) as "gravatar_hash",
         sp."roll_no",
         cl."name" as "class_name",
         co."name" as "course_name",
@@ -26,14 +29,26 @@ router.get('/', async (req, res) => {
           ELSE COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0)
         END as "total_score",
         CASE
-          WHEN :taskType = 'lab' THEN 
-            CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0)::float / l."lab_max") * 100 ELSE 0 END
-          WHEN :taskType = 'quiz' THEN 
-            CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0)::float / q."quiz_max") * 100 ELSE 0 END
-          ELSE
-            CASE WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
-                 THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0))::float / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))) * 100 
-                 ELSE 0 END
+          WHEN (CASE
+            WHEN :taskType = 'lab' THEN 
+              CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0)::float / l."lab_max") * 100 ELSE 0 END
+            WHEN :taskType = 'quiz' THEN 
+              CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0)::float / q."quiz_max") * 100 ELSE 0 END
+            ELSE
+              CASE WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
+                   THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0))::float / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))) * 100 
+                   ELSE 0 END
+          END) > 100 THEN 100
+          ELSE (CASE
+            WHEN :taskType = 'lab' THEN 
+              CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0)::float / l."lab_max") * 100 ELSE 0 END
+            WHEN :taskType = 'quiz' THEN 
+              CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0)::float / q."quiz_max") * 100 ELSE 0 END
+            ELSE
+              CASE WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
+                   THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0))::float / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))) * 100 
+                   ELSE 0 END
+          END)
         END as "accuracy"
       FROM "Users" u
       JOIN "StudentProfiles" sp ON u."id" = sp."user_id"

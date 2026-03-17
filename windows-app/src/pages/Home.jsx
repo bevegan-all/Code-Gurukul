@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, FileCode2, NotebookPen, ClipboardList } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { BookOpen, FileCode2, NotebookPen, ClipboardList, Quote, Calendar } from 'lucide-react';
 import StudentHeader from '../components/StudentHeader';
 import api from '../api';
 
 const statCards = [
-  { label: 'My Subjects', key: 'totalSubjects', icon: <BookOpen size={28} aria-hidden="true" />, color: 'indigo', desc: 'Assigned automatically via class enrollment' },
-  { label: 'Active Assignments', key: 'activeAssignments', icon: <FileCode2 size={28} aria-hidden="true" />, color: 'fuchsia', desc: 'Ready to be submitted in the Sandbox Lab' },
-  { label: 'Published Notes', key: 'publishedNotes', icon: <NotebookPen size={28} aria-hidden="true" />, color: 'emerald', desc: 'Latest study material from your professors' },
-  { label: 'Active Quizzes', key: 'activeQuizzes', icon: <ClipboardList size={28} aria-hidden="true" />, color: 'orange', desc: 'Timed tests to evaluate your knowledge' },
+  { label: 'My Subjects', key: 'totalSubjects', icon: <BookOpen size={28} aria-hidden="true" />, color: 'indigo', desc: 'Assigned automatically via class enrollment', path: '/app/home' }, // Default home shows subjects as well or we can add a subjects page if missing, but usually home has them. Actually windows app doesn't seem to have a dedicated subjects list page? Let's check App.jsx again.
+  { label: 'Active Assignments', key: 'activeAssignments', icon: <FileCode2 size={28} aria-hidden="true" />, color: 'fuchsia', desc: 'Ready to be submitted in the Sandbox Lab', path: '/app/assignments' },
+  { label: 'Published Notes', key: 'publishedNotes', icon: <NotebookPen size={28} aria-hidden="true" />, color: 'emerald', desc: 'Latest study material from your professors', path: '/app/notes' },
+  { label: 'Active Quizzes', key: 'activeQuizzes', icon: <ClipboardList size={28} aria-hidden="true" />, color: 'orange', desc: 'Timed tests to evaluate your knowledge', path: '/app/quizzes' },
 ];
 
 const colorMap = {
@@ -18,15 +19,22 @@ const colorMap = {
 };
 
 export default function Home() {
+  const navigate = useNavigate();
   const [user] = useState(JSON.parse(localStorage.getItem('user')) || {});
   const [data, setData] = useState(null);
+  const [attendance, setAttendance] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get('/student/dashboard')
-      .then(res => setData(res.data))
-      .catch(err => console.error('Dashboard fetch error:', err))
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.get('/student/dashboard'),
+      api.get('/student/attendance')
+    ]).then(([dashRes, attRes]) => {
+      setData(dashRes.data);
+      setAttendance(attRes.data);
+    })
+    .catch(err => console.error('Dashboard fetch error:', err))
+    .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -59,19 +67,19 @@ export default function Home() {
                   <div
                     key={card.key}
                     role="listitem"
-                    aria-label={`${card.label}: ${value}. ${card.desc}`}
-                    className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden group"
+                    onClick={() => navigate(card.path)}
+                    className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all cursor-pointer"
                   >
                     <div className="flex justify-between items-start relative z-10">
                       <div>
-                        <p className="text-sm font-bold text-slate-500 mb-1 uppercase tracking-wider">{card.label}</p>
-                        <h3 className="text-4xl font-black text-slate-900" aria-hidden="true">{value}</h3>
+                        <p className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">{card.label}</p>
+                        <h3 className="text-4xl font-black text-slate-900">{value}</h3>
                       </div>
-                      <div className={`p-4 ${c.bg} ${c.text} rounded-xl`} aria-hidden="true">
+                      <div className={`p-4 ${c.bg} ${c.text} rounded-xl transition-transform group-hover:scale-110 shadow-sm border border-transparent group-hover:border-slate-100`}>
                         {card.icon}
                       </div>
                     </div>
-                    <div className={`mt-4 pt-4 border-t border-slate-100 text-sm font-semibold ${c.foot}`}>
+                    <div className={`mt-4 pt-4 border-t border-slate-100 text-[10px] font-black uppercase tracking-widest ${c.foot}`}>
                       {card.desc}
                     </div>
                   </div>
@@ -79,14 +87,83 @@ export default function Home() {
               })}
             </div>
 
-            <div className="bg-gradient-to-br from-indigo-700 to-indigo-900 rounded-3xl p-10 text-white shadow-xl relative overflow-hidden mt-8">
-              <div className="absolute -right-20 -bottom-20 w-80 h-80 border-4 border-indigo-500 rounded-full opacity-20" aria-hidden="true"></div>
-              <h2 className="text-2xl md:text-3xl font-bold mb-3 relative z-10 leading-snug max-w-2xl drop-shadow-lg">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
+              {/* Attendance Chart */}
+              <div className="lg:col-span-2 bg-white rounded-3xl p-8 border border-slate-200 shadow-sm relative overflow-hidden group">
+                <div className="flex justify-between items-center mb-10">
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900 uppercase tracking-tight">Academic Attendance</h2>
+                    <p className="text-[10px] text-slate-400 font-black uppercase mt-1 tracking-widest">Live Presence Data</p>
+                  </div>
+                  <button 
+                    onClick={() => navigate('/app/attendance')}
+                    className="text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition-colors"
+                  >
+                    Details <Calendar size={12} />
+                  </button>
+                </div>
+
+                <div className="flex items-end justify-between h-48 gap-4 px-2">
+                  {attendance.length > 0 ? attendance.map((item, idx) => {
+                    const perc = item.total > 0 ? Math.round((item.present / item.total) * 100) : 0;
+                    return (
+                      <div key={idx} className="flex-1 flex flex-col items-center gap-4 group/bar h-full justify-end">
+                        <div className="relative w-full flex flex-col items-center justify-end h-full">
+                          <div className="w-full bg-slate-50 rounded-t-2xl h-full absolute bottom-0 border-x border-t border-slate-100/50"></div>
+                          <div 
+                            className="w-full bg-indigo-600 rounded-t-2xl transition-all duration-1000 ease-out relative shadow-lg shadow-indigo-100 group-hover/bar:bg-indigo-500"
+                            style={{ height: `${perc}%` }}
+                          >
+                            <div className="absolute top-2 left-1/2 -translate-x-1/2 text-[10px] font-black text-white drop-shadow-sm">
+                              {perc}%
+                            </div>
+                          </div>
+                        </div>
+                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-tighter truncate w-full text-center" title={item.subject_name}>
+                          {item.subject_name.length > 10 ? item.subject_name.substring(0, 8) + '...' : item.subject_name}
+                        </p>
+                      </div>
+                    );
+                  }) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-300 gap-3">
+                      <BookOpen size={40} className="text-slate-200" />
+                      <p className="text-[10px] font-black uppercase tracking-widest">No attendance data yet</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Motivational Sidebar */}
+              <div className="bg-gradient-to-br from-slate-800 to-slate-950 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden flex flex-col justify-between">
+                <div className="absolute -right-20 -bottom-20 w-80 h-80 border-4 border-slate-700/20 rounded-full"></div>
+                
+                <div className="relative z-10">
+                  <Quote size={40} className="text-indigo-500/20 mb-6" />
+                  <h2 className="text-2xl font-bold mb-4 leading-tight">
+                    "Focus on the process, <br/>Results will follow."
+                  </h2>
+                </div>
+                
+                <div className="relative z-10 bg-indigo-600/10 backdrop-blur-md p-5 rounded-2xl border border-white/5">
+                   <p className="text-xs text-indigo-200 leading-relaxed font-medium">Your interactive sandbox is ready for assignments. Keep coding, keep growing.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-3xl p-10 border border-slate-200 shadow-sm relative overflow-hidden mt-8">
+              <div className="absolute -right-20 -bottom-20 w-80 h-80 bg-indigo-50 rounded-full opacity-50" aria-hidden="true"></div>
+              <h2 className="text-2xl font-bold text-slate-900 mb-2 relative z-10">
                 Your Secure Sandbox Environment is Active.
               </h2>
-              <p className="text-indigo-200 font-medium z-10 relative text-lg mb-6">
+              <p className="text-slate-500 font-medium z-10 relative mb-6">
                 Navigate to your assignments to launch the interactive code editor or take quizzes securely.
               </p>
+              <button 
+                onClick={() => navigate('/app/assignments')}
+                className="relative z-10 px-8 py-3 bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+              >
+                Go to Assignments
+              </button>
             </div>
           </div>
         )}

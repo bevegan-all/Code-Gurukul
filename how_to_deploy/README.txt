@@ -32,5 +32,6 @@ ALL BATCH FILES:
   8_start_frontend_dev.bat   → Start frontend dev server (localhost:5173)
   9_restart_backend.bat      → Kill port 5000 + restart Node server
   10_full_fresh_deploy.bat   → Full automated first-time setup
+  11_update_email_credentials.bat → Update Gmail config for sending mail
 
 FULL GUIDE:  Read DEPLOYMENT_GUIDE.txt

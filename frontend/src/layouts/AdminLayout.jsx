@@ -10,6 +10,7 @@ import ManageSubjects from '../pages/admin/ManageSubjects';
 import ManageTeachers from '../pages/admin/ManageTeachers';
 import ManageStudents from '../pages/admin/ManageStudents';
 import Leaderboard from '../pages/admin/Leaderboard';
+import AdminSettings from '../pages/admin/AdminSettings';
 
 const AdminLayout = () => {
   return (
@@ -29,6 +30,7 @@ const AdminLayout = () => {
             <Route path="teachers" element={<ManageTeachers />} />
             <Route path="students" element={<ManageStudents />} />
             <Route path="leaderboard" element={<Leaderboard />} />
+            <Route path="settings" element={<AdminSettings />} />
           </Routes>
         </main>
       </div>

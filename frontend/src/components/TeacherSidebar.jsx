@@ -9,6 +9,7 @@ const TeacherSidebar = () => {
   const navItems = [
     { label: 'Dashboard', icon: LayoutDashboard, path: '/teacher/dashboard' },
     { label: 'My Timetable', icon: Calendar, path: '/teacher/timetable' },
+    { label: 'Student Attendance', icon: BookOpen, path: '/teacher/attendance' },
     { label: 'My Subjects', icon: BookMarked, path: '/teacher/subjects' },
     { label: 'My Classes', icon: Users, path: '/teacher/classes' },
     { label: 'Students', icon: GraduationCap, path: '/teacher/students' },
@@ -23,21 +24,30 @@ const TeacherSidebar = () => {
 
   return (
     <div className="h-screen w-64 bg-white border-r border-gray-200 flex flex-col fixed left-0 top-0 shadow-sm z-10">
-      <div className="p-5 flex items-center justify-center border-b border-gray-100">
+      <div className="p-6 flex items-center justify-center border-b border-gray-100">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-purple-600 rounded-lg shadow-sm">
-            <BookOpen className="w-5 h-5 text-white" />
+          <div className="p-2.5 bg-primary rounded-xl shadow-md rotate-3 group-hover:rotate-0 transition-transform">
+            <BookOpen className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-lg font-bold text-gray-800">CodeGurukul</h1>
+          <h1 className="text-xl font-extrabold text-foreground tracking-tight">CodeGurukul</h1>
         </div>
       </div>
 
       {/* User info */}
       {user && (
         <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold text-sm flex-shrink-0">
-            {initial}
-          </div>
+          {(user.profile_image || user.gravatar_hash) ? (
+            <img 
+              src={user.profile_image || `https://www.gravatar.com/avatar/${user.gravatar_hash}?d=identicon`} 
+              alt={user.name} 
+              referrerPolicy="no-referrer"
+              className="w-9 h-9 rounded-full object-cover border border-gray-200"
+            />
+          ) : (
+            <div className="w-9 h-9 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold text-sm flex-shrink-0">
+              {initial}
+            </div>
+          )}
           <div className="min-w-0">
             <p className="text-sm font-semibold text-gray-800 truncate">{user.name}</p>
             <p className="text-xs text-gray-400 truncate">{user.email}</p>

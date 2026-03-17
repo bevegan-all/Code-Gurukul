@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import api from '../../utils/axios';
-import { Activity, X, MonitorPlay, CheckCircle, Clock, Maximize2, Minimize2 } from 'lucide-react';
+import { Activity, X, MonitorPlay, CheckCircle, Clock, Maximize2, Minimize2, Users, Zap, CheckSquare, Square } from 'lucide-react';
 
 const Monitor = () => {
   const [onlineStudents, setOnlineStudents] = useState(new Map());
@@ -16,6 +16,13 @@ const Monitor = () => {
   const [allSlotStudents, setAllSlotStudents] = useState([]); // Full student objects for offline list
   const [useCurrentSlotOnly, setUseCurrentSlotOnly] = useState(false);
   const [alerts, setAlerts] = useState([]); // List of {id, name, type: 'idle'}
+
+  // Attendance modals
+  const [showManualAttModal, setShowManualAttModal] = useState(false);
+  const [showAutoAttModal, setShowAutoAttModal] = useState(false);
+  const [manualAttStatus, setManualAttStatus] = useState({}); // { [studentId]: 'present'|'absent' }
+  const [attSaving, setAttSaving] = useState(false);
+  const [toast, setToast] = useState(null); // { type: 'success'|'error', msg: string }
 
   const socketRef = useRef(null);
   const screenRefreshInterval = useRef(null);
@@ -39,15 +46,21 @@ const Monitor = () => {
     socketRef.current = socket;
 
     socket.on('connect', () => {
+      console.log('Teacher connected to monitor socket');
+
       // Fetch all classes to join their monitor rooms
       api.get('/teacher/my-subjects').then((res) => {
         const classIds = [...new Set(res.data.filter(s => s.class_id).map(s => s.class_id))];
-        classIds.forEach((classId) => socket.emit('join_teacher_monitor', { classId }));
+        classIds.forEach((classId) => {
+          socket.emit('join_teacher_monitor', { classId });
+          socket.emit('teacher:request_status', { classId });
+        });
       }).catch(err => console.error('Could not fetch classes for monitor', err));
 
       // Fetch current active lab slot
       api.get('/teacher/current-lab').then(res => {
         if (res.data) {
+          console.log('[Monitor] Current lab slot found:', res.data.subject_name);
           setCurrentLabSlot(res.data);
           setUseCurrentSlotOnly(true);
           const { subject_id, lab_id } = res.data;
@@ -55,7 +68,16 @@ const Monitor = () => {
             .then(sres => {
               setLabStudents(new Set(sres.data.map(s => s.id)));
               setAllSlotStudents(sres.data);
-            });
+              const classIds = [...new Set(sres.data.map(s => s.class_id).filter(Boolean))];
+              classIds.forEach(id => {
+                socket.emit('join_teacher_monitor', { classId: id });
+                socket.emit('teacher:request_status', { classId: id });
+              });
+            }).catch(e => console.error('[Monitor] Failed to fetch slot students', e));
+        } else {
+          console.log('[Monitor] No active lab slot found for this time.');
+          // If no specific slot, maybe request from all my classes
+          socket.emit('teacher:request_status', {});
         }
       }).catch(console.error);
     });
@@ -251,15 +273,113 @@ const Monitor = () => {
     return 'text-slate-500 bg-slate-100 border-slate-200';
   };
 
+  const showToast = useCallback((type, msg) => {
+    setToast({ type, msg });
+    setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  const openManualAtt = () => {
+    if (!currentLabSlot) return showToast('error', 'No active lab session detected.');
+    if (allSlotStudents.length === 0) return showToast('error', 'No students assigned to this lab slot.');
+    // Default all to absent
+    const initial = {};
+    allSlotStudents.forEach(s => { initial[s.id] = 'absent'; });
+    setManualAttStatus(initial);
+    setShowManualAttModal(true);
+  };
+
+  const openAutoAtt = () => {
+    if (!currentLabSlot) return showToast('error', 'No active lab session detected.');
+    if (allSlotStudents.length === 0) return showToast('error', 'No students assigned to this lab slot.');
+    setShowAutoAttModal(true);
+  };
+
+  const submitManualAtt = async () => {
+    setAttSaving(true);
+    const labId = currentLabSlot.lab_id || currentLabSlot.minor_lab_id;
+    const isMinor = currentLabSlot.type === 'minor';
+    const students = allSlotStudents.map(s => ({ id: s.id, present: manualAttStatus[s.id] === 'present' }));
+    try {
+      await api.post('/teacher/attendance/take', {
+        subjectId: currentLabSlot.subject_id,
+        labId: labId || null,
+        isMinor,
+        date: new Date().toLocaleDateString('en-CA'),
+        students
+      });
+      const presentCount = students.filter(s => s.present).length;
+      showToast('success', `Attendance saved! ${presentCount} present, ${students.length - presentCount} absent.`);
+      setShowManualAttModal(false);
+    } catch (e) {
+      showToast('error', 'Failed to save: ' + (e.response?.data?.error || e.message));
+    } finally {
+      setAttSaving(false);
+    }
+  };
+
+  const submitAutoAtt = async () => {
+    setAttSaving(true);
+    const labId = currentLabSlot.lab_id || currentLabSlot.minor_lab_id;
+    const isMinor = currentLabSlot.type === 'minor';
+    const students = allSlotStudents.map(s => {
+      const liveStatus = onlineStudents.get(String(s.id))?.activity;
+      return { id: s.id, present: (liveStatus === 'Active' || liveStatus === 'Idle') };
+    });
+    try {
+      await api.post('/teacher/attendance/take', {
+        subjectId: currentLabSlot.subject_id,
+        labId: labId || null,
+        isMinor,
+        date: new Date().toLocaleDateString('en-CA'),
+        students
+      });
+      const presentCount = students.filter(s => s.present).length;
+      showToast('success', `Auto-Attendance saved! ${presentCount} present, ${students.length - presentCount} absent.`);
+      setShowAutoAttModal(false);
+    } catch (e) {
+      showToast('error', 'Failed to save: ' + (e.response?.data?.error || e.message));
+    } finally {
+      setAttSaving(false);
+    }
+  };
+
+
+  // Auto attendance preview counts
+  const autoOnlineCount = allSlotStudents.filter(s => {
+    const liveStatus = onlineStudents.get(String(s.id))?.activity;
+    return liveStatus === 'Active' || liveStatus === 'Idle';
+  }).length;
+  const autoOfflineCount = allSlotStudents.length - autoOnlineCount;
+
   return (
-    <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-100px)]">
+    <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-100px)] relative">
       {/* Left: Student Grid */}
       <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 p-6 overflow-y-auto">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-start mb-6">
           <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
             <Activity className="text-emerald-500" /> Live Lab Monitor
           </h2>
           {currentLabSlot && (
+            <div className="flex flex-col gap-2 items-end">
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => {
+                    const classId = currentLabSlot.class_id;
+                    socketRef.current?.emit('teacher:request_status', { classId });
+                    showToast('success', 'Requesting latest status from all students...');
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-blue-200 transition-colors"
+                  title="Force refresh student online/offline status"
+                >
+                  <Activity size={12} /> Refresh Status
+                </button>
+                <button onClick={openManualAtt} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-purple-200 transition-colors">
+                  <Users size={12} /> Manual
+                </button>
+                <button onClick={openAutoAtt} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-emerald-200 transition-colors">
+                  <Zap size={12} /> Auto
+                </button>
+              </div>
             <div className="flex items-center gap-3">
               <label 
                 className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-all ${
@@ -290,6 +410,7 @@ const Monitor = () => {
                 />
                 <span className="text-xs font-bold text-slate-600">Current Slot ({currentLabSlot.subject_name})</span>
               </label>
+            </div>
             </div>
           )}
         </div>
@@ -485,10 +606,10 @@ const Monitor = () => {
                       <div className="space-y-2">
                         {studentHistory.assignments.map((doc, idx) => (
                           <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 text-sm">
-                            <p className="font-medium text-slate-700 leading-snug line-clamp-2">{doc.question_text}</p>
+                            <p className="font-medium text-slate-700 leading-snug line-clamp-2">{doc.name}</p>
                             <div className="flex justify-between items-center mt-2">
                               <span className="text-xs font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-100">
-                                {doc.ai_marks} / 10
+                                {doc.score} / {doc.max_score || 10}
                               </span>
                               <span className="text-xs text-slate-400">{new Date(doc.submitted_at).toLocaleDateString()}</span>
                             </div>
@@ -509,9 +630,9 @@ const Monitor = () => {
                       <div className="space-y-2">
                         {studentHistory.quizzes.map((doc, idx) => (
                           <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 text-sm flex justify-between items-center gap-3">
-                            <p className="font-medium text-slate-700 truncate">{doc.title}</p>
+                            <p className="font-medium text-slate-700 truncate">{doc.name}</p>
                             <span className="text-xs font-bold px-2 py-0.5 bg-purple-50 text-purple-700 rounded border border-purple-100 shrink-0">
-                              {doc.total_marks}%
+                              {doc.score} / {doc.max_score}
                             </span>
                           </div>
                         ))}
@@ -520,10 +641,177 @@ const Monitor = () => {
                       <p className="text-slate-400 text-sm italic p-3 bg-white rounded-lg border border-slate-200">No recent quizzes.</p>
                     )}
                   </div>
+
+                  {/* Sessions Activity */}
+                  <div>
+                    <h4 className="font-bold text-slate-700 mb-3 flex items-center gap-2 text-sm">
+                      <Activity size={15} className="text-emerald-500" /> Today's Activity (Logins)
+                    </h4>
+                    {studentHistory?.sessions?.length > 0 ? (
+                      <div className="space-y-2">
+                        {studentHistory.sessions.map((s, idx) => (
+                          <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 text-xs flex justify-between items-center bg-gray-50/50">
+                            <div>
+                               <p className="font-semibold text-gray-800">Student App Connection</p>
+                               <span className="text-gray-500 text-[10px] uppercase font-bold tracking-widest">
+                                  {new Date(s.login_time).toLocaleTimeString()}
+                               </span>
+                            </div>
+                            {s.logout_time ? (
+                               <span className="bg-emerald-100 text-emerald-700 font-bold px-2 py-1 rounded text-[10px]">Logged out: {new Date(s.logout_time).toLocaleTimeString()}</span>
+                            ) : (
+                               <span className="bg-amber-100 text-amber-700 font-bold px-2 py-1 rounded text-[10px] animate-pulse whitespace-nowrap">Online Now</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-slate-400 text-sm italic p-3 bg-white rounded-lg border border-slate-200">No app login history today.</p>
+                    )}
+                  </div>
                 </>
               )}
             </div>
           </div>
+        </div>
+      )}
+      {/* ── MANUAL ATTENDANCE MODAL ── */}
+      {showManualAttModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[85vh] overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-white">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <Users size={18} className="text-purple-600" /> Manual Attendance
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {currentLabSlot?.subject_name} &bull; {new Date().toLocaleDateString('en-GB')}
+                </p>
+              </div>
+              <button onClick={() => setShowManualAttModal(false)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                <X size={18} className="text-gray-400" />
+              </button>
+            </div>
+
+            {/* Stats bar */}
+            <div className="flex gap-4 px-6 py-3 bg-gray-50 border-b border-gray-100 text-xs font-bold">
+              <span className="text-emerald-600">Present: {Object.values(manualAttStatus).filter(s => s === 'present').length}</span>
+              <span className="text-rose-500">Absent: {Object.values(manualAttStatus).filter(s => s === 'absent').length}</span>
+              <span className="text-gray-400 ml-auto">Total: {allSlotStudents.length}</span>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-y-auto flex-1">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50/80 sticky top-0 z-10">
+                  <tr className="text-xs uppercase text-gray-400 tracking-wider font-semibold">
+                    <th className="px-5 py-3 text-left">Roll No</th>
+                    <th className="px-5 py-3 text-left">Name</th>
+                    <th className="px-5 py-3 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {allSlotStudents
+                    .slice().sort((a, b) => (a.roll_no || '').localeCompare(b.roll_no || ''))
+                    .map(student => (
+                    <tr key={student.id} className="hover:bg-gray-50/60 transition-colors">
+                      <td className="px-5 py-3 text-gray-400 font-medium text-xs">{student.roll_no || '—'}</td>
+                      <td className="px-5 py-3 font-semibold text-gray-800">{student.name}</td>
+                      <td className="px-5 py-3 text-center">
+                        <button
+                          onClick={() => setManualAttStatus(prev => ({ ...prev, [student.id]: prev[student.id] === 'present' ? 'absent' : 'present' }))}
+                          className={`inline-flex items-center gap-1.5 w-28 justify-center py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${
+                            manualAttStatus[student.id] === 'present'
+                              ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                              : 'bg-rose-50 text-rose-500 hover:bg-rose-100'
+                          }`}
+                        >
+                          {manualAttStatus[student.id] === 'present'
+                            ? <><CheckSquare size={12} /> Present</>
+                            : <><Square size={12} /> Absent</>}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-white">
+              <button onClick={() => setShowManualAttModal(false)} className="px-4 py-2 text-sm font-bold text-gray-500 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { const all = {}; allSlotStudents.forEach(s => { all[s.id] = 'present'; }); setManualAttStatus(all); }}
+                  className="px-4 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors"
+                >Mark All Present</button>
+                <button
+                  onClick={submitManualAtt}
+                  disabled={attSaving}
+                  className="px-5 py-2 text-sm font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {attSaving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle size={15} />}
+                  Save Attendance
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── AUTO ATTENDANCE MODAL ── */}
+      {showAutoAttModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-emerald-50 to-white">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <Zap size={18} className="text-emerald-600" /> Auto Attendance
+              </h3>
+              <button onClick={() => setShowAutoAttModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <X size={18} className="text-gray-400" />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-gray-600">Attendance will be taken based on <strong>current online status</strong> of students in this lab slot.</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-center">
+                  <div className="text-3xl font-extrabold text-emerald-600">{autoOnlineCount}</div>
+                  <div className="text-xs font-bold text-emerald-500 uppercase tracking-wider mt-1">Will be Present</div>
+                  <div className="text-[10px] text-gray-400 mt-0.5">Online / Idle</div>
+                </div>
+                <div className="bg-rose-50 border border-rose-100 rounded-xl p-4 text-center">
+                  <div className="text-3xl font-extrabold text-rose-500">{autoOfflineCount}</div>
+                  <div className="text-xs font-bold text-rose-400 uppercase tracking-wider mt-1">Will be Absent</div>
+                  <div className="text-[10px] text-gray-400 mt-0.5">Offline</div>
+                </div>
+              </div>
+              <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-xs text-amber-700 font-medium">
+                ⚠️ This will override any existing attendance record for today's session.
+              </div>
+            </div>
+            <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
+              <button onClick={() => setShowAutoAttModal(false)} className="flex-1 py-2 text-sm font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">Cancel</button>
+              <button
+                onClick={submitAutoAtt}
+                disabled={attSaving}
+                className="flex-1 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {attSaving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Zap size={15} />}
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TOAST ── */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-[100] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl text-white text-sm font-bold animate-in slide-in-from-bottom-4 duration-300 ${
+          toast.type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'
+        }`}>
+          {toast.type === 'success' ? <CheckCircle size={18} /> : <X size={18} />}
+          {toast.msg}
         </div>
       )}
     </div>

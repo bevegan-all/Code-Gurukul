@@ -22,10 +22,10 @@ const Sidebar = () => {
     <div className="h-screen w-64 bg-white border-r border-gray-200 flex flex-col fixed left-0 top-0 shadow-sm z-10">
       <div className="p-6 flex items-center justify-center border-b border-gray-100">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary rounded-lg">
+          <div className="p-2.5 bg-primary rounded-xl shadow-md rotate-3 group-hover:rotate-0 transition-transform">
             <BookOpen className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-xl font-bold text-gray-800">CodeGurukul</h1>
+          <h1 className="text-xl font-extrabold text-foreground tracking-tight">CodeGurukul</h1>
         </div>
       </div>
 

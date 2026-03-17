@@ -22,12 +22,21 @@ const StudentHeader = ({ user, title = "Secure Lab Active", subtitle = "Activity
           <p className="text-sm font-bold text-slate-800">{user?.name || 'Student'}</p>
           <p className="text-xs text-slate-500 font-medium">Student • CodeGurukul</p>
         </div>
-        <div
-          className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-blue-400 flex items-center justify-center text-white font-bold shadow-sm"
-          aria-label={`Student avatar for ${user?.name || 'Student'}`}
-        >
-          <span aria-hidden="true">{user?.name?.charAt(0) || 'S'}</span>
-        </div>
+        {(user?.profile_image || user?.gravatar_hash) ? (
+          <img 
+            src={user.profile_image || `https://www.gravatar.com/avatar/${user.gravatar_hash}?d=identicon`} 
+            alt="" 
+            referrerPolicy="no-referrer"
+            className="w-10 h-10 rounded-full object-cover shadow-sm"
+          />
+        ) : (
+          <div
+            className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-blue-400 flex items-center justify-center text-white font-bold shadow-sm"
+            aria-label={`Student avatar for ${user?.name || 'Student'}`}
+          >
+            <span aria-hidden="true">{user?.name?.charAt(0) || 'S'}</span>
+          </div>
+        )}
       </div>
     </header>
   );

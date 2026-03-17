@@ -10,6 +10,7 @@ const User = sequelize.define('User', {
   role: { type: DataTypes.ENUM('admin', 'teacher', 'student'), allowNull: false },
   is_blind: { type: DataTypes.BOOLEAN, defaultValue: false },
   is_active: { type: DataTypes.BOOLEAN, defaultValue: true },
+  profile_image: { type: DataTypes.STRING, allowNull: true },
   department_id: { type: DataTypes.INTEGER, allowNull: true }
 }, { timestamps: true, createdAt: 'created_at', updatedAt: false });
 
@@ -189,11 +190,39 @@ const ActivityLog = sequelize.define('ActivityLog', {
   metadata_json: { type: DataTypes.JSONB }
 }, { timestamps: true, createdAt: 'timestamp', updatedAt: false });
 
+// --- 22. Attendance ---
+const Attendance = sequelize.define('Attendance', {
+  date: { type: DataTypes.DATEONLY, allowNull: false },
+  status: { type: DataTypes.ENUM('present', 'absent'), allowNull: false, defaultValue: 'absent' },
+  lab_id: { type: DataTypes.INTEGER, allowNull: true },
+  minor_lab_id: { type: DataTypes.INTEGER, allowNull: true }, 
+  subject_id: { type: DataTypes.INTEGER, allowNull: false }
+}, { timestamps: true, createdAt: 'created_at', updatedAt: 'updated_at' });
+
+// --- 23. Holiday ---
+const Holiday = sequelize.define('Holiday', {
+  date: { type: DataTypes.DATEONLY, allowNull: false },
+  subject_id: { type: DataTypes.INTEGER, allowNull: false },
+  lab_id: { type: DataTypes.INTEGER, allowNull: true },
+  minor_lab_id: { type: DataTypes.INTEGER, allowNull: true },
+  reason: { type: DataTypes.STRING, allowNull: true, defaultValue: 'Holiday' }
+}, { timestamps: true, createdAt: 'created_at', updatedAt: false });
+
 // ================== RELATIONSHIPS ==================
 
 // Admin -> Departments/Practice Questions
 Department.belongsTo(User, { as: 'Creator', foreignKey: 'created_by' });
 PracticeQuestion.belongsTo(User, { as: 'Creator', foreignKey: 'created_by' });
+
+// Attendance Relationships
+User.hasMany(Attendance, { foreignKey: 'student_id', onDelete: 'CASCADE' });
+Attendance.belongsTo(User, { foreignKey: 'student_id' });
+
+User.hasMany(Attendance, { as: 'MarkedAttendances', foreignKey: 'teacher_id', onDelete: 'SET NULL' });
+Attendance.belongsTo(User, { as: 'Teacher', foreignKey: 'teacher_id' });
+
+Subject.hasMany(Attendance, { foreignKey: 'subject_id', onDelete: 'CASCADE' });
+Attendance.belongsTo(Subject, { foreignKey: 'subject_id' });
 
 // Departments <-> Courses
 Department.hasMany(Course, { foreignKey: 'department_id', onDelete: 'CASCADE' });
@@ -377,5 +406,7 @@ module.exports = {
   Lab,
   LabSlot,
   MinorLab,
-  MinorLabSlot
+  MinorLabSlot,
+  Attendance,
+  Holiday
 };

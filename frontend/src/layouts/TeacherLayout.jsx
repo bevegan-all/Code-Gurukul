@@ -11,6 +11,7 @@ import Assignments from '../pages/teacher/Assignments';
 import Quizzes from '../pages/teacher/Quizzes';
 import Notes from '../pages/teacher/Notes';
 import TeacherTimetable from '../pages/teacher/TeacherTimetable';
+import AttendancePage from '../pages/teacher/AttendancePage';
 
 import Monitor from '../pages/teacher/Monitor';
 import Leaderboard from '../pages/teacher/Leaderboard';
@@ -28,6 +29,7 @@ const TeacherLayout = () => {
             <Route path="timetable" element={<TeacherTimetable />} />
             <Route path="subjects" element={<MySubjects />} />
             <Route path="subjects/:subjectId" element={<SubjectDetail />} />
+            <Route path="attendance" element={<AttendancePage />} />
             <Route path="classes" element={<MyClasses />} />
             <Route path="students" element={<MyStudents />} />
             <Route path="assignments" element={<Assignments />} />

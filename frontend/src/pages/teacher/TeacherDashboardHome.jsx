@@ -45,7 +45,7 @@ const TeacherDashboardHome = () => {
   }, []);
 
   useEffect(() => {
-    if (!stats.myClasses.length) return;
+    if (!stats.myClasses.length && !slotStudents.length) return;
 
     const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
     const SOCKET_URL = apiBase.replace(/\/api$/, '');
@@ -56,7 +56,8 @@ const TeacherDashboardHome = () => {
 
     socket.on('connect', () => {
       const classIds = [...new Set(stats.myClasses.filter(c => c.class_id || c.Class?.id).map(c => c.class_id || c.Class?.id))];
-      classIds.forEach(id => socket.emit('join_teacher_monitor', { classId: id }));
+      const additionalClassIds = [...new Set(slotStudents.map(s => s.class_id).filter(Boolean))];
+      [...new Set([...classIds, ...additionalClassIds])].forEach(id => socket.emit('join_teacher_monitor', { classId: id }));
     });
 
     const updateOnline = (data) => {
@@ -77,7 +78,7 @@ const TeacherDashboardHome = () => {
     socket.on('student:activity', updateOnline);
 
     return () => socket.disconnect();
-  }, [stats.myClasses]);
+  }, [stats.myClasses, slotStudents]);
 
   const onlineInSlot = slotStudents.filter(s => onlineIds.has(Number(s.id))).length;
 
@@ -165,9 +166,11 @@ const TeacherDashboardHome = () => {
                               <p className={`font-semibold ${isActive ? 'text-purple-900' : 'text-gray-900'}`}>
                                 {ts.subject_name || ts.Subject?.name || 'Unknown'}
                               </p>
-                              <p className={`text-sm ${isActive ? 'text-purple-600' : 'text-gray-500'}`}>
-                                {ts.class_name || ts.Class?.name || 'Unknown Class'}
-                              </p>
+                              {(ts.class_name || ts.Class?.name) && (
+                                <p className={`text-sm ${isActive ? 'text-purple-600' : 'text-gray-500'}`}>
+                                  {ts.class_name || ts.Class?.name}
+                                </p>
+                              )}
                             </div>
                             <span className={`px-2 py-1 text-xs font-semibold rounded-lg ${
                               ts.Subject?.type === 'major' || ts.type === 'major' 

@@ -217,9 +217,18 @@ export default function AdminLeaderboard() {
 
                   {/* Student Details */}
                   <div className="col-span-5 flex items-center gap-4 min-w-0">
-                    <div className="w-12 h-12 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center font-black text-indigo-600 text-lg flex-shrink-0">
-                      {entry.student_name?.charAt(0) || '?'}
-                    </div>
+                    {(entry.profile_image || entry.profileImage || entry.student_image || entry.gravatar_hash) ? (
+                      <img 
+                        src={entry.profile_image || entry.profileImage || entry.student_image || `https://www.gravatar.com/avatar/${entry.gravatar_hash}?d=identicon`} 
+                        alt="" 
+                        referrerPolicy="no-referrer"
+                        className="w-12 h-12 rounded-2xl object-cover shadow-sm border border-slate-100 flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center font-black text-indigo-600 text-lg flex-shrink-0">
+                        {entry.student_name?.charAt(0) || '?'}
+                      </div>
+                    )}
                     <div className="min-w-0">
                       <p className="font-black text-slate-800 text-base truncate tracking-tight">{entry.student_name}</p>
                       <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">{entry.class_name || 'No Class Assigned'}</p>

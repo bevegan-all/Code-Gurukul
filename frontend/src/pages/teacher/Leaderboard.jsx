@@ -42,7 +42,11 @@ export default function Leaderboard() {
       taskType: filters.taskType,
       sortBy: filters.sortBy
     };
-    if (filters.classId) params.classId = filters.classId;
+    if (filters.classId === 'global') {
+      params.isGlobal = 'true';
+    } else if (filters.classId) {
+      params.classId = filters.classId;
+    }
 
     api.get('/teacher/leaderboard', { params })
       .then(res => {
@@ -86,6 +90,7 @@ export default function Leaderboard() {
             onChange={e => setFilters(prev => ({ ...prev, classId: e.target.value }))}
             className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white"
           >
+            <option value="global">All College Students</option>
             <option value="">All My Classes</option>
             {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
@@ -190,9 +195,18 @@ export default function Leaderboard() {
 
                   {/* Name */}
                   <div className="col-span-5 flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-500 shadow-sm text-sm flex-shrink-0 border border-white">
-                      {entry.student_name?.charAt(0) || '?'}
-                    </div>
+                    {(entry.profile_image || entry.profileImage || entry.student_image || entry.gravatar_hash) ? (
+                      <img 
+                        src={entry.profile_image || entry.profileImage || entry.student_image || `https://www.gravatar.com/avatar/${entry.gravatar_hash}?d=identicon`} 
+                        alt="" 
+                        referrerPolicy="no-referrer"
+                        className="w-10 h-10 rounded-full object-cover shadow-sm flex-shrink-0 border border-white"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-500 shadow-sm text-sm flex-shrink-0 border border-white">
+                        {entry.student_name?.charAt(0) || '?'}
+                      </div>
+                    )}
                     <div className="min-w-0">
                       <p className="font-bold text-slate-800 text-sm truncate">{entry.student_name}</p>
                       <p className="text-[10px] text-slate-400 font-medium">{entry.class_name || 'No Class'}</p>

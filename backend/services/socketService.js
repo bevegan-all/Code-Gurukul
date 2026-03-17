@@ -18,89 +18,89 @@ module.exports = (io) => {
     // Student joining their normal heartbeat and initial online event
     socket.on('student:online', (data) => {
       const sid = String(data.studentId);
-      console.log(`student:online received from ${sid} (socket: ${socket.id}) for class ${data.classId}`);
-      if (data.classId) {
-        // Tag socket for automatic offline on disconnect
-        socket.studentInfo = data;
-        socket.join(`class_${data.classId}`);
-        socket.join(`student_${sid}`);
-        studentSocketMap.set(sid, socket.id);
-        io.to(`teacher_${data.classId}`).emit('student:activity', {
-          studentId: data.studentId,
-          studentName: data.studentName,
-          rollNo: data.rollNo,
-          activity: data.activity || 'Active',
-          action: data.action || 'Online',
-          classId: data.classId
-        });
-      }
+      const cid = data.classId ? String(data.classId) : 'none';
+      
+      console.log(`[Socket] Student Online: ${data.studentName} (ID: ${sid}, Class: ${cid})`);
+      
+      // Tag socket for automatic offline on disconnect
+      socket.studentInfo = data;
+      socket.join(`class_${cid}`);
+      socket.join(`student_${sid}`);
+      studentSocketMap.set(sid, socket.id);
+      
+      // Notify all rooms the teacher might be in
+      const payload = {
+        studentId: data.studentId,
+        studentName: data.studentName,
+        rollNo: data.rollNo,
+        activity: data.activity || 'Active',
+        action: data.action || 'Online',
+        classId: data.classId,
+        lastSeen: Date.now()
+      };
+      
+      io.to(`teacher_${cid}`).emit('student:activity', payload);
     });
 
     socket.on('student:ping', (data) => {
       const sid = String(data.studentId);
+      const cid = data.classId ? String(data.classId) : 'none';
+      
       studentSocketMap.set(sid, socket.id);
-      if (data.classId) {
-        socket.studentInfo = data; // Keep info updated
-        io.to(`teacher_${data.classId}`).emit('student:activity', {
-          studentId: data.studentId,
-          studentName: data.studentName,
-          rollNo: data.rollNo,
-          activity: data.activity || 'Active',
-          action: data.action || 'Browser Open',
-          classId: data.classId
-        });
-      }
+      socket.studentInfo = data; 
+      
+      const payload = {
+        studentId: data.studentId,
+        studentName: data.studentName,
+        rollNo: data.rollNo,
+        activity: data.activity || 'Active',
+        action: data.action || 'Working',
+        classId: data.classId,
+        lastSeen: Date.now()
+      };
+      
+      io.to(`teacher_${cid}`).emit('student:activity', payload);
     });
 
     socket.on('student:activity', (data) => {
-      const sid = String(data.studentId);
-      studentSocketMap.set(sid, socket.id);
-      if (data.classId) {
-        io.to(`teacher_${data.classId}`).emit('student:activity', data);
-      }
-    });
-
-    // Existing / backward compatibility for old lab
-    socket.on('join_class', ({ studentId, classId }) => {
-      const sid = String(studentId);
-      socket.join(`class_${classId}`);
-      socket.join(`student_${sid}`);
-      studentSocketMap.set(sid, socket.id);
-      io.to(`teacher_${classId}`).emit('student:online', { studentId });
+      const cid = data.classId ? String(data.classId) : 'none';
+      const payload = { ...data, lastSeen: Date.now() };
+      io.to(`teacher_${cid}`).emit('student:activity', payload);
     });
 
     // Teacher joins their monitoring room
-    socket.on('join_teacher_monitor', ({ classId }) => {
-      console.log(`Teacher ${socket.id} joined monitor room for class ${classId}`);
-      socket.join(`teacher_${classId}`);
-    });
-
-    socket.on('student:heartbeat', (data) => {
-      // data: { studentId, activity, currentTask, classId }
-      io.to(`teacher_${data.classId}`).emit('student:activity', data);
+    socket.on('join_teacher_monitor', (data) => {
+      const { classId } = data;
+      if (classId) {
+        console.log(`[Socket] Teacher ${socket.id} joined monitor room for class ${classId}`);
+        socket.join(`teacher_${classId}`);
+      }
     });
 
     socket.on('disconnect', () => {
-      console.log(`Client disconnected: ${socket.id}`);
-      
       if (socket.studentInfo) {
         const { studentId, studentName, rollNo, classId } = socket.studentInfo;
-        console.log(`Notifying teacher room teacher_${classId} that student ${studentId} is Offline`);
-        io.to(`teacher_${classId}`).emit('student:activity', {
+        const cid = classId ? String(classId) : 'none';
+        
+        console.log(`[Socket] Student Offline: ${studentName} (ID: ${studentId})`);
+        
+        const payload = {
           studentId,
           studentName,
           rollNo,
           classId,
           activity: 'Offline',
-          action: 'App Closed'
-        });
+          action: 'Disconnected',
+          lastSeen: 0
+        };
+        
+        io.to(`teacher_${cid}`).emit('student:activity', payload);
       }
 
-      // Clean up from studentSocketMap if this was the latest socket for a student
+      // Clean up from studentSocketMap
       for (const [studentId, mappedSocketId] of studentSocketMap.entries()) {
         if (mappedSocketId === socket.id) {
           studentSocketMap.delete(studentId);
-          console.log(`Removed student ${studentId} from socket map`);
           break;
         }
       }
@@ -125,8 +125,19 @@ module.exports = (io) => {
       }
     });
 
+    socket.on('teacher:request_status', (data) => {
+      const { classId } = data;
+      const target = classId ? `class_${classId}` : 'none';
+      console.log(`[Socket] Teacher ${socket.id} requested status for ${target}`);
+      if (classId) {
+        io.to(`class_${classId}`).emit('teacher:request_status');
+      } else {
+        // Broadcast to all students if no classId provided
+        io.emit('teacher:request_status');
+      }
+    });
+
     socket.on('student:screen_stream', (data) => {
-      console.log(`Screen stream from student ${data.studentId}, classId: ${data.classId}, len: ${data.screenBase64?.length}`);
       if (data.classId) {
         io.to(`teacher_${data.classId}`).emit('student:screen_stream', data);
       }

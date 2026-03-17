@@ -1,9 +1,12 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { User, OTPRequest } = require('../models/postgres');
 const emailService = require('../services/emailService');
+const { OAuth2Client } = require('google-auth-library');
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Generate Tokens
 const generateTokens = (user) => {
@@ -12,6 +15,63 @@ const generateTokens = (user) => {
   const refreshToken = jwt.sign(payload, process.env.JWT_REFRESH_SECRET, { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN });
   return { accessToken, refreshToken };
 };
+
+// @route   POST /api/auth/google-login
+// @desc    Authenticate with Google
+router.post('/google-login', async (req, res) => {
+  try {
+    const { idToken } = req.body;
+    if (!idToken) return res.status(400).json({ error: 'Token is required' });
+
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const { email, name, picture } = payload;
+
+    // Check if user exists (Only allowed for students and teachers registered by admin)
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(401).json({ error: 'Your email is not registered. Please contact the administrator.' });
+    }
+
+    if (user.role === 'admin') {
+       // Optional: enforce password for admins for security, but user asked for students and teachers.
+    }
+
+    // Update profile image if it changed
+    if (picture && user.profile_image !== picture) {
+      user.profile_image = picture;
+      await user.save();
+    }
+
+    let classId = null;
+    if (user.role === 'student') {
+      const { StudentProfile } = require('../models/postgres');
+      const profile = await StudentProfile.findOne({ where: { user_id: user.id } });
+      if (profile) classId = profile.class_id;
+    }
+
+    const tokens = generateTokens(user);
+    res.json({
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        is_blind: user.is_blind,
+        class_id: classId,
+        profile_image: user.profile_image,
+        gravatar_hash: crypto.createHash('md5').update(user.email.trim().toLowerCase()).digest('hex')
+      },
+      ...tokens
+    });
+  } catch (err) {
+    console.error('Google Auth Error:', err);
+    res.status(401).json({ error: 'Google authentication failed' });
+  }
+});
 
 // @route   POST /api/auth/login
 // @desc    Authenticate user & get token
@@ -51,7 +111,9 @@ router.post('/login', async (req, res) => {
         email: user.email,
         role: user.role,
         is_blind: user.is_blind,
-        class_id: classId
+        class_id: classId,
+        profile_image: user.profile_image,
+        gravatar_hash: crypto.createHash('md5').update(user.email.trim().toLowerCase()).digest('hex')
       },
       ...tokens
     });

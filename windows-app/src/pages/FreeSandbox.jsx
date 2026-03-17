@@ -32,7 +32,7 @@ export default function FreeSandbox() {
   // AI Chat
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([
-    { role: 'model', content: '👋 **Hi! I am Gemini Guru.** I am here to help you in the Free Sandbox. Ask me anything — how to debug your code, explain a concept, or suggest what to try next!' }
+    { role: 'model', content: '👋 **Hi! I am Code Guru.** I am here to help you in the Free Sandbox. Ask me anything — how to debug your code, explain a concept, or suggest what to try next!' }
   ]);
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
@@ -51,7 +51,10 @@ export default function FreeSandbox() {
   }, [output]);
 
   useEffect(() => {
-    socketRef.current = io(SOCKET_URL, { transports: ['websocket'] });
+    socketRef.current = io(SOCKET_URL, { 
+      transports: ['websocket'],
+      extraHeaders: { 'ngrok-skip-browser-warning': 'true' }
+    });
 
     socketRef.current.on('code:output', (data) => {
       setOutput(prev => prev + data.data);
@@ -185,12 +188,12 @@ export default function FreeSandbox() {
             <div className="ml-auto flex items-center gap-2">
               <button
                 onClick={() => setIsChatOpen(o => !o)}
-                aria-label={isChatOpen ? 'Close Gemini Guru chat panel' : 'Open Gemini Guru chat panel'}
+                aria-label={isChatOpen ? 'Close Code Guru chat panel' : 'Open Code Guru chat panel'}
                 aria-expanded={isChatOpen}
                 aria-controls="gemini-chat-panel"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 text-xs font-bold transition-colors"
               >
-                <Bot size={14} aria-hidden="true" /> Gemini Guru
+                <Bot size={14} aria-hidden="true" /> Code Guru
               </button>
               {isRunning ? (
                 <button
@@ -338,7 +341,7 @@ export default function FreeSandbox() {
               transition={{ type: 'spring', stiffness: 350, damping: 30 }}
               className="bg-slate-800 border-l border-slate-700 flex flex-col overflow-hidden shrink-0"
               role="complementary"
-              aria-label="Gemini Guru AI chat panel"
+              aria-label="Code Guru AI chat panel"
             >
               {/* Chat Header */}
               <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-gradient-to-r from-indigo-900/60 to-slate-800 shrink-0">
@@ -347,14 +350,14 @@ export default function FreeSandbox() {
                     <Sparkles size={16} className="text-white" aria-hidden="true" />
                   </div>
                   <div>
-                    <h3 className="text-white font-bold text-sm">Gemini Guru</h3>
+                    <h3 className="text-white font-bold text-sm">Code Guru</h3>
                     <p className="text-indigo-300 text-[10px]">AI Coding Assistant</p>
                   </div>
                 </div>
                 <button
                   onClick={() => setIsChatOpen(false)}
                   className="text-slate-400 hover:text-white transition-colors"
-                  aria-label="Close Gemini Guru chat panel"
+                  aria-label="Close Code Guru chat panel"
                 >
                   <X size={18} aria-hidden="true" />
                 </button>
@@ -365,7 +368,7 @@ export default function FreeSandbox() {
                 className="flex-1 overflow-y-auto p-4 space-y-3"
                 role="log"
                 aria-live="polite"
-                aria-label="Gemini Guru chat messages"
+                aria-label="Code Guru chat messages"
                 aria-atomic="false"
               >
                 {chatMessages.map((msg, i) => (
@@ -396,7 +399,7 @@ export default function FreeSandbox() {
                 <form
                   onSubmit={e => { e.preventDefault(); handleSendMessage(); }}
                   className="flex gap-2 items-end"
-                  aria-label="Send message to Gemini Guru"
+                  aria-label="Send message to Code Guru"
                 >
                   <textarea
                     value={chatInput}
@@ -412,7 +415,7 @@ export default function FreeSandbox() {
                   <button
                     type="submit"
                     disabled={isChatLoading || !chatInput.trim()}
-                    aria-label={isChatLoading ? 'Sending message, please wait' : 'Send message to Gemini Guru'}
+                    aria-label={isChatLoading ? 'Sending message, please wait' : 'Send message to Code Guru'}
                     aria-busy={isChatLoading}
                     className="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition-colors disabled:opacity-40 shrink-0"
                   >

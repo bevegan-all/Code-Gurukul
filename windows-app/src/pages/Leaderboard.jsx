@@ -236,9 +236,18 @@ export default function Leaderboard() {
 
                     {/* Avatar */}
                     <div className="col-span-1 flex justify-center" aria-hidden="true">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg transition-transform hover:rotate-3 ${isUser ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-500'}`}>
-                        {entry.student_name?.charAt(0) || '?'}
-                      </div>
+                      {(entry.profile_image || entry.profileImage || entry.student_image || entry.gravatar_hash) ? (
+                        <img 
+                          src={entry.profile_image || entry.profileImage || entry.student_image || `https://www.gravatar.com/avatar/${entry.gravatar_hash}?d=identicon`} 
+                          alt="" 
+                          referrerPolicy="no-referrer"
+                          className="w-12 h-12 rounded-2xl object-cover shadow-sm transition-transform hover:rotate-3"
+                        />
+                      ) : (
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg transition-transform hover:rotate-3 ${isUser ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-500'}`}>
+                          {entry.student_name?.charAt(0) || '?'}
+                        </div>
+                      )}
                     </div>
                     
                     {/* Name */}

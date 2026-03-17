@@ -1,7 +1,7 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, desktopCapturer, screen } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,6 +27,7 @@ let keyboardHookProcess = null; // PowerShell WH_KEYBOARD_LL hook process
 // When teacher unrestricts: we kill the PowerShell process → hook removed automatically.
 // ─────────────────────────────────────────────────────────────────────────────
 const POWERSHELL_HOOK_SCRIPT = `
+# Codegurukul_Kiosk_Hook_v1
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
@@ -102,8 +103,24 @@ public class KioskKeyHook {
 [KioskKeyHook]::Start()
 `;
 
+function killAllOrphanedHooks() {
+  try {
+    // Using an identifiable string in the command line so we only kill our own hooks via OS-level WMI 
+    execSync('wmic process where "name=\'powershell.exe\' and commandline like \'%Codegurukul_Kiosk_Hook_v1%\'" call terminate', {
+      windowsHide: true,
+      stdio: 'ignore'
+    });
+    console.log('[KeyHook] All orphaned hooks destroyed.');
+  } catch (e) {
+    // Expected to throw if no processes to kill
+  }
+}
+
 function startKeyboardHook() {
-  if (keyboardHookProcess) return; // Already running
+  if (keyboardHookProcess) return; // Already running logic
+
+  // Pre-cleanup in case of ghost Vite hot-reloads
+  killAllOrphanedHooks();
 
   keyboardHookProcess = spawn('powershell.exe', [
     '-NoProfile',
@@ -126,15 +143,18 @@ function startKeyboardHook() {
     keyboardHookProcess = null;
   });
 
-  console.log('[KeyHook] Started WH_KEYBOARD_LL hook, PID:', keyboardHookProcess.pid);
+  console.log('[KeyHook] Started WH_KEYBOARD_LL hook, PID:', keyboardHookProcess?.pid);
 }
 
 function stopKeyboardHook() {
   if (keyboardHookProcess) {
-    keyboardHookProcess.kill('SIGTERM');
+    try {
+      spawn('taskkill', ['/pid', keyboardHookProcess.pid.toString(), '/f', '/t']);
+    } catch(e) {}
     keyboardHookProcess = null;
-    console.log('[KeyHook] Stopped WH_KEYBOARD_LL hook');
   }
+  // Guarantee ANY ghost processes are destroyed so Alt+Tab and Win keys are restored instantly
+  killAllOrphanedHooks();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -218,7 +238,8 @@ function applyUnrestriction() {
   mainWindow.setAlwaysOnTop(false);
   mainWindow.setResizable(true);
   mainWindow.setMovable(true);
-  mainWindow.minimize();
+  
+  // Do NOT minimize here, otherwise the student misses the 'Access Granted' notification.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

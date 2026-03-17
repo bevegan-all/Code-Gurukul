@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Home, BookOpen, FileText, Code2, ClipboardList, Trophy, Terminal, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Home, BookOpen, FileText, Code2, ClipboardList, Trophy, Terminal, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { toJpeg } from 'html-to-image';
 import { SOCKET_URL } from '../config';
@@ -41,6 +41,7 @@ const StudentLayout = () => {
     { name: 'Learn Mode', icon: <BookOpen size={20} aria-hidden="true" />, path: '/app/learn' },
     { name: 'Notes', icon: <FileText size={20} aria-hidden="true" />, path: '/app/notes' },
     { name: 'Lab Assignments', icon: <Code2 size={20} aria-hidden="true" />, path: '/app/assignments' },
+    { name: 'Check Attendance', icon: <Calendar size={20} aria-hidden="true" />, path: '/app/attendance' },
     { name: 'Free Sandbox', icon: <Terminal size={20} aria-hidden="true" />, path: '/app/sandbox' },
     { name: 'Quizzes', icon: <ClipboardList size={20} aria-hidden="true" />, path: '/app/quizzes' },
     { name: 'Leaderboard', icon: <Trophy size={20} aria-hidden="true" />, path: '/app/leaderboard' },

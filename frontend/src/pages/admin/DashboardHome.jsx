@@ -12,6 +12,7 @@ const DashboardHome = () => {
     departments: 0,
   });
   const [chartData, setChartData] = useState([]);
+  const [recentActivity, setRecentActivity] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,6 +26,7 @@ const DashboardHome = () => {
           departments: res.data.departments,
         });
         setChartData(res.data.chartData || []);
+        setRecentActivity(res.data.recentActivity || []);
       } catch (err) {
         console.error('Failed to fetch dashboard stats:', err);
       } finally {
@@ -124,19 +126,22 @@ const DashboardHome = () => {
             <h3 className="font-semibold text-gray-800">Recent Onboarding</h3>
           </div>
           <div className="flex-1 p-6 space-y-6 overflow-y-auto">
-            {/* Mock Timeline */}
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="flex gap-4">
+            {recentActivity.length > 0 ? recentActivity.map((activity, idx) => (
+              <div key={activity.id} className="flex gap-4">
                 <div className="mt-1">
                   <div className="w-2.5 h-2.5 rounded-full bg-primary ring-4 ring-primary/20"></div>
-                  {i !== 4 && <div className="w-0.5 h-full bg-gray-100 mx-auto mt-2"></div>}
+                  {idx !== recentActivity.length - 1 && <div className="w-0.5 h-full bg-gray-100 mx-auto mt-2"></div>}
                 </div>
                 <div className="flex-1 pb-4">
                   <p className="text-sm font-medium text-gray-800">New Student Registered</p>
-                  <p className="text-xs text-gray-500 mt-1">CS Dept • 2 hours ago</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {activity.name} • {activity.department_name || 'No Dept'} • {new Date(activity.created_at).toLocaleString()}
+                  </p>
                 </div>
               </div>
-            ))}
+            )) : (
+              <p className="text-sm text-gray-500 text-center mt-10">No recent onboarding activity.</p>
+            )}
           </div>
         </div>
 

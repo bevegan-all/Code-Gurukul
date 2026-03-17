@@ -6,6 +6,11 @@ const { Department, Course, Class, Subject, User, TeacherSubject, StudentProfile
 const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const emailService = require('../services/emailService');
+const XLSX = require('xlsx');
+const multer = require('multer');
+const fs = require('fs');
+
+const upload = multer({ dest: 'uploads/temp/' });
 
 router.use(auth);
 router.use(requireRole('admin'));
@@ -32,9 +37,76 @@ router.get('/dashboard-stats', async (req, res) => {
       students: parseInt(row.students, 10) || 0
     }));
 
-    res.json({ teachers, students, courses, departments, chartData });
+    const recentActivityRaw = await sequelize.query(`
+      SELECT u.id, u.name, u.created_at, d.name as department_name, cl.name as class_name
+      FROM "Users" u
+      LEFT JOIN "StudentProfiles" sp ON u.id = sp.user_id
+      LEFT JOIN "Classes" cl ON sp.class_id = cl.id
+      LEFT JOIN "Courses" co ON cl.course_id = co.id
+      LEFT JOIN "Departments" d ON co.department_id = d.id
+      WHERE u.role = 'student'
+      ORDER BY u.created_at DESC
+      LIMIT 10
+    `, { type: sequelize.QueryTypes.SELECT });
+
+    res.json({ teachers, students, courses, departments, chartData, recentActivity: recentActivityRaw });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ================= RECENT ACTIVITY (NOTIFICATIONS) =================
+router.get('/recent-activity', async (req, res) => {
+  try {
+    const recentActivityRaw = await sequelize.query(`
+      SELECT u.id, u.name, u.created_at, d.name as department_name, cl.name as class_name
+      FROM "Users" u
+      LEFT JOIN "StudentProfiles" sp ON u.id = sp.user_id
+      LEFT JOIN "Classes" cl ON sp.class_id = cl.id
+      LEFT JOIN "Courses" co ON cl.course_id = co.id
+      LEFT JOIN "Departments" d ON co.department_id = d.id
+      WHERE u.role = 'student'
+      ORDER BY u.created_at DESC
+      LIMIT 10
+    `, { type: sequelize.QueryTypes.SELECT });
+    res.json(recentActivityRaw);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ================= SETTINGS =================
+router.put('/settings', async (req, res) => {
+  try {
+    const { name, currentPassword, newPassword } = req.body;
+    const user = await User.findByPk(req.user.id);
+    
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    // Update basic info
+    if (name) user.name = name;
+
+    // Password Update Logic
+    if (currentPassword && newPassword) {
+      const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+      if (!isMatch) {
+        return res.status(400).json({ error: 'Incorrect current password' });
+      }
+      user.password_hash = await bcrypt.hash(newPassword, 10);
+    }
+    
+    await user.save();
+    
+    // Optionally return the updated user object to overwrite localStorage
+    res.json({
+      msg: 'Settings updated successfully',
+      user: {
+        id: user.id, name: user.name, email: user.email, role: user.role
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server Error' });
   }
 });
 
@@ -666,6 +738,178 @@ router.delete('/students/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/admin/students/export
+router.get('/students/export', async (req, res) => {
+  try {
+    const studentsData = await sequelize.query(`
+      SELECT sp.roll_no as "Roll No", u.name as "Full Name", u.email as "Email", u.phone as "Phone",
+             cl.name as "Class", l.name as "Major Lab",
+             ms.name as "Minor Subject", ml.name as "Minor Lab",
+             sp.parent_email as "Parent Email", sp.parent_phone as "Parent Phone",
+             CASE WHEN u.is_blind THEN 'Yes' ELSE 'No' END as "Adaptive Mode"
+      FROM "Users" u
+      JOIN "StudentProfiles" sp ON u.id = sp.user_id
+      LEFT JOIN "Classes" cl ON sp.class_id = cl.id
+      LEFT JOIN "Labs" l ON sp.lab_id = l.id
+      LEFT JOIN "Subjects" ms ON sp.minor_subject_id = ms.id
+      LEFT JOIN "MinorLabs" ml ON sp.minor_lab_id = ml.id
+      WHERE u.role = 'student'
+      ORDER BY cl.name, sp.roll_no ASC
+    `, { type: sequelize.QueryTypes.SELECT });
+
+    const ws = XLSX.utils.json_to_sheet(studentsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Students");
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=students_export_${Date.now()}.xlsx`);
+    res.send(buf);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/students/import
+router.post('/students/import', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Excel file is required' });
+  
+  const t = await sequelize.transaction();
+  try {
+    const workbook = XLSX.readFile(req.file.path);
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const data = XLSX.utils.sheet_to_json(sheet);
+
+    let successCount = 0;
+    const skipped = [];
+    const errors = [];
+
+    for (const [idx, row] of data.entries()) {
+      const rollNo = row['Roll No']?.toString().trim();
+      const fullName = row['Full Name']?.toString().trim();
+      const email = row['Email']?.toString().trim();
+      const phone = row['Phone']?.toString().trim();
+      const className = row['Class']?.toString().trim();
+      const labName = row['Major Lab']?.toString().trim();
+      const minorSubName = row['Minor Subject']?.toString().trim();
+      const minorLabName = row['Minor Lab']?.toString().trim();
+      const parentEmail = row['Parent Email']?.toString().trim();
+      const parentPhone = row['Parent Phone']?.toString().trim();
+      const adaptive = row['Adaptive Mode']?.toString().toLowerCase() === 'yes';
+
+      if (!rollNo || !fullName || !email) {
+        errors.push({ row: idx + 2, error: 'Missing Roll No, Name, or Email' });
+        continue;
+      }
+
+      // Check existence by roll no
+      const existingRoll = await StudentProfile.findOne({ where: { roll_no: rollNo }, transaction: t });
+      if (existingRoll) {
+        skipped.push({ row: idx + 2, name: fullName, email, roll_no: rollNo, reason: 'Roll number already exists' });
+        continue;
+      }
+
+      // Check existence by email (User table)
+      const existingEmail = await User.findOne({ where: { email }, transaction: t });
+      if (existingEmail) {
+        skipped.push({ row: idx + 2, name: fullName, email, roll_no: rollNo, reason: 'Email already exists' });
+        continue;
+      }
+
+      // Resolve Class
+      let resolvedClassId = null;
+      if (className) {
+        const cls = await Class.findOne({ where: { name: className }, transaction: t });
+        if (!cls) {
+          errors.push({ row: idx + 2, error: `Class "${className}" not found` });
+          continue;
+        }
+        resolvedClassId = cls.id;
+      }
+
+      // Resolve Major Lab
+      let resolvedLabId = null;
+      if (labName && resolvedClassId) {
+        const lab = await Lab.findOne({ where: { name: labName, class_id: resolvedClassId }, transaction: t });
+        if (!lab) {
+          errors.push({ row: idx + 2, error: `Lab "${labName}" not found in class "${className}"` });
+          continue;
+        }
+        resolvedLabId = lab.id;
+      }
+
+      // Resolve Minor Subject
+      let resolvedMinorSubId = null;
+      if (minorSubName) {
+        const sub = await Subject.findOne({ where: { name: minorSubName, type: 'minor' }, transaction: t });
+        if (!sub) {
+          errors.push({ row: idx + 2, error: `Minor Subject "${minorSubName}" not found` });
+          continue;
+        }
+        resolvedMinorSubId = sub.id;
+      }
+
+      // Resolve Minor Lab
+      let resolvedMinorLabId = null;
+      if (minorLabName && resolvedMinorSubId) {
+        const ml = await MinorLab.findOne({ where: { name: minorLabName, subject_id: resolvedMinorSubId }, transaction: t });
+        if (!ml) {
+          errors.push({ row: idx + 2, error: `Minor Lab "${minorLabName}" not found for subject "${minorSubName}"` });
+          continue;
+        }
+        resolvedMinorLabId = ml.id;
+      }
+
+      // Create User
+      const defaultPassword = 'student123';
+      const password_hash = await bcrypt.hash(defaultPassword, 10);
+      const student = await User.create({ 
+        name: fullName, email, phone: phone || null, password_hash, role: 'student', is_blind: adaptive 
+      }, { transaction: t });
+
+      // Create Profile
+      await StudentProfile.create({
+        user_id: student.id,
+        class_id: resolvedClassId,
+        roll_no: rollNo,
+        parent_email: parentEmail || null,
+        parent_phone: parentPhone || null,
+        minor_subject_id: resolvedMinorSubId,
+        lab_id: resolvedLabId,
+        minor_lab_id: resolvedMinorLabId
+      }, { transaction: t });
+
+      // Assign Major Subjects
+      if (resolvedClassId) {
+        const cls = await Class.findByPk(resolvedClassId, { transaction: t });
+        if (cls && cls.course_id) {
+          const majorSubjects = await Subject.findAll({ 
+            where: { course_id: cls.course_id, type: { [Op.or]: ['major', 'vsc'] } }, 
+            transaction: t 
+          });
+          for (const sub of majorSubjects) {
+            await StudentSubject.create({ student_id: student.id, subject_id: sub.id }, { transaction: t });
+          }
+        }
+      }
+
+      // Assign Minor Subject record
+      if (resolvedMinorSubId) {
+        await StudentSubject.create({ student_id: student.id, subject_id: resolvedMinorSubId }, { transaction: t });
+      }
+
+      successCount++;
+    }
+
+    await t.commit();
+    fs.unlinkSync(req.file.path);
+    res.json({ success: true, imported: successCount, skipped, errors });
+  } catch (err) {
+    await t.rollback();
+    if (req.file) fs.unlinkSync(req.file.path);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ================= LEADERBOARD =================
 router.get('/leaderboard-filters', async (req, res) => {
   try {
@@ -699,6 +943,9 @@ router.get('/leaderboard', async (req, res) => {
       SELECT 
         u."id" as "student_id", 
         u."name" as "student_name",
+        u."profile_image" as "profile_image",
+        u."email" as "student_email",
+        md5(lower(trim(u."email"))) as "gravatar_hash",
         sp."roll_no",
         cl."name" as "class_name",
         CASE 

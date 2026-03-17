@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { X, FileCode2, BookOpen, Clock } from 'lucide-react';
+import { X, FileCode2, BookOpen, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
 import api from '../utils/axios';
 
 const StudentDetailModal = ({ studentId, onClose }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sendingReport, setSendingReport] = useState(false);
+  const [toast, setToast] = useState(null); // { message, type: 'success' | 'error' }
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   useEffect(() => {
     api.get(`/teacher/students/${studentId}/full-details`)
@@ -21,13 +27,11 @@ const StudentDetailModal = ({ studentId, onClose }) => {
       await api.post('/teacher/send-student-report', {
         student_id: data.profile.user_id,
         parent_email: targetEmail,
-        studentData: data.profile,
-        assignmentData: { avg_marks: data.stats.avgAssignment },
-        quizData: { avg_marks: data.stats.avgQuiz }
+        studentData: data.profile
       });
-      alert('Report sent successfully to ' + targetEmail);
+      showToast('Report sent successfully to ' + targetEmail);
     } catch (err) {
-      alert('Failed to send report');
+      showToast('Failed to send report', 'error');
     } finally {
       setSendingReport(false);
     }
@@ -42,7 +46,7 @@ const StudentDetailModal = ({ studentId, onClose }) => {
     </div>
   );
 
-  const { profile, assignments, quizzes, sessions, stats } = data;
+  const { profile, assignments, quizzes, attendance, stats } = data;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm overflow-y-auto py-10">
@@ -106,8 +110,11 @@ const StudentDetailModal = ({ studentId, onClose }) => {
                 <span className="text-gray-500 text-xs font-bold uppercase tracking-widest">Attendance</span>
               </div>
               <div className="text-4xl font-black text-gray-900 leading-none">
-                {stats.totalSessions}
-                <span className="text-sm font-bold text-gray-300 ml-2">sessions</span>
+                {stats.attPercentage}
+                <span className="text-sm font-bold text-gray-300 ml-1">%</span>
+                <div className="text-[10px] text-gray-400 mt-1 uppercase tracking-tighter font-bold">
+                  {stats.presentSessions} of {stats.totalSessions} present
+                </div>
               </div>
             </div>
           </div>
@@ -122,40 +129,20 @@ const StudentDetailModal = ({ studentId, onClose }) => {
                 </h3>
               </div>
               <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50/50 text-gray-400 text-[10px] uppercase font-black tracking-widest">
-                    <tr>
-                      <th className="px-6 py-4 text-left">Internal Assessment</th>
-                      <th className="px-6 py-4 text-right">Credits</th>
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="text-gray-400 border-b border-gray-100 bg-gray-50/50">
+                      <th className="text-left px-5 py-3 font-black uppercase tracking-wider">Subject</th>
+                      <th className="text-center px-5 py-3 font-black uppercase tracking-wider">Assignments</th>
+                      <th className="text-right px-5 py-3 font-black uppercase tracking-wider">Quizzes</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50 font-medium">
-                    {assignments.length > 0 ? assignments.map(a => (
-                      <tr key={a.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-6 py-4">
-                          <div className="text-gray-800">{a.title}</div>
-                          <div className="text-[10px] text-purple-400 uppercase font-bold mt-1">Lab Assignment • {a.compiler_required}</div>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <span className={`px-2.5 py-1 rounded-lg font-bold ${a.total_score > (a.max_score * 0.7) ? 'text-emerald-600 bg-emerald-50' : 'text-purple-600 bg-purple-50'}`}>
-                            {a.total_score} <span className="text-[10px] opacity-60">/ {a.max_score || 10}</span>
-                          </span>
-                        </td>
-                      </tr>
-                    )) : (
-                      <tr><td colSpan="2" className="px-6 py-10 text-center text-gray-400 italic">No assignments attempted yet.</td></tr>
-                    )}
-                    {quizzes.map(q => (
-                      <tr key={q.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-6 py-4">
-                          <div className="text-gray-800">{q.title}</div>
-                          <div className="text-[10px] text-blue-400 uppercase font-bold mt-1">Online MCQ Quiz</div>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <span className={`px-2.5 py-1 rounded-lg font-bold ${q.score > 70 ? 'text-emerald-600 bg-emerald-50' : 'text-blue-600 bg-blue-50'}`}>
-                            {q.score} <span className="text-[10px] opacity-60">/ {q.max_marks}</span>
-                          </span>
-                        </td>
+                  <tbody className="divide-y divide-gray-50">
+                    {stats.academicStats && stats.academicStats.map((item, idx) => (
+                      <tr key={idx}>
+                        <td className="px-5 py-3 text-gray-700 font-bold">{item.subject_name}</td>
+                        <td className="px-5 py-3 text-center font-black text-gray-800">{Number(item.assignment_avg || 0).toFixed(1)} / 10</td>
+                        <td className="px-5 py-3 text-right font-black text-gray-800">{Number(item.quiz_avg || 0).toFixed(1)} / 10</td>
                       </tr>
                     ))}
                   </tbody>
@@ -163,41 +150,66 @@ const StudentDetailModal = ({ studentId, onClose }) => {
               </div>
             </div>
 
-            {/* Login Logs */}
+            {/* Attendance Records */}
             <div>
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-black text-gray-800 flex items-center gap-3">
                   <div className="w-2 h-8 bg-emerald-500 rounded-full"></div>
-                  Recent Connectivity
+                  Student Attendance
                 </h3>
               </div>
-              <div className="space-y-3">
-                {sessions.length > 0 ? sessions.map((s, i) => (
+                {/* Summary Table */}
+                {stats.summaryStats && stats.summaryStats.length > 0 && (
+                  <div className="bg-emerald-50/50 border border-emerald-100 rounded-3xl overflow-hidden mb-6">
+                    <table className="w-full text-[11px]">
+                      <thead className="bg-emerald-100/50 text-emerald-800 uppercase font-black tracking-widest">
+                        <tr>
+                          <th className="px-5 py-3 text-left">Subject & Lab</th>
+                          <th className="px-5 py-3 text-right">Attendance</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-emerald-100">
+                        {stats.summaryStats.map((s, idx) => (
+                          <tr key={idx}>
+                            <td className="px-5 py-3">
+                              <div className="font-bold text-gray-700">{s.subject_name}</div>
+                              <div className="text-[9px] text-emerald-500 font-medium">{s.lab_name}</div>
+                            </td>
+                            <td className="px-5 py-3 text-right font-black text-gray-800">
+                              {s.present} / {s.total} <span className="ml-2 text-[9px] text-emerald-600 bg-white px-1.5 py-0.5 rounded-md shadow-sm">{Math.round((s.present/s.total)*100)}%</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-4 ml-1">Recent Sessions</h4>
+                {attendance && attendance.length > 0 ? attendance.map((att, i) => (
                   <div key={i} className="group flex items-center justify-between p-4 bg-white border border-gray-100 rounded-2xl hover:border-emerald-200 transition-all duration-300">
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center group-hover:bg-emerald-50 transition-colors">
-                        <Clock className="w-5 h-5 text-gray-400 group-hover:text-emerald-500" />
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                        att.status === 'present' ? 'bg-emerald-50 text-emerald-500' : 'bg-rose-50 text-rose-500'
+                      }`}>
+                        <Clock className="w-5 h-5" />
                       </div>
                       <div>
-                        <div className="text-sm font-bold text-gray-700">App Session</div>
+                        <div className="text-sm font-bold text-gray-700">{att.subject_name}</div>
                         <div className="text-[10px] text-gray-400 font-medium">
-                          {new Date(s.login_time).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                          {new Date(att.date).toLocaleDateString('en-IN', { dateStyle: 'medium' })} • {att.lab_name}
                         </div>
                       </div>
                     </div>
-                    {s.logout_time ? (
-                      <div className="text-[10px] font-black text-emerald-500 bg-emerald-50 px-3 py-1 rounded-full uppercase tracking-wider">Closed Cleanly</div>
-                    ) : (
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                        <span className="text-[10px] font-black text-emerald-500 uppercase tracking-wider">Active Now</span>
-                      </div>
-                    )}
+                    <div className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider ${
+                      att.status === 'present' ? 'text-emerald-500 bg-emerald-50' : 'text-rose-500 bg-rose-50'
+                    }`}>
+                      {att.status}
+                    </div>
                   </div>
                 )) : (
-                  <div className="p-10 border border-dashed border-gray-200 rounded-3xl text-center text-gray-400 italic">No session history found.</div>
+                  <div className="p-10 border border-dashed border-gray-200 rounded-3xl text-center text-gray-400 italic">No attendance record found.</div>
                 )}
-              </div>
             </div>
           </div>
         </div>
@@ -230,6 +242,23 @@ const StudentDetailModal = ({ studentId, onClose }) => {
           )}
         </div>
       </div>
+
+      {/* Animated Toast Pop */}
+      {toast && (
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[60] animate-in slide-in-from-bottom-5 fade-in duration-300">
+          <div className={`px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 border ${
+            toast.type === 'error' ? 'bg-white border-red-100 text-red-600' : 'bg-emerald-600 border-emerald-500 text-white'
+          }`}>
+            <div className={`p-2 rounded-xl ${toast.type === 'error' ? 'bg-red-50' : 'bg-white/20'}`}>
+              {toast.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+            </div>
+            <div>
+              <p className="text-sm font-black tracking-tight">{toast.type === 'error' ? 'Error' : 'Success'}</p>
+              <p className="text-xs font-semibold opacity-90">{toast.message}</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

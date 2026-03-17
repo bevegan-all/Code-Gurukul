@@ -10,6 +10,7 @@ import Notes from '../pages/student/Notes';
 import NoteDetail from '../pages/student/NoteDetail';
 import Leaderboard from '../pages/student/Leaderboard';
 import AssignmentDetail from '../pages/student/AssignmentDetail';
+import StudentAttendance from '../pages/student/StudentAttendance';
 
 const StudentLayout = () => {
   return (
@@ -27,6 +28,7 @@ const StudentLayout = () => {
             <Route path="assignments/:assignmentId" element={<AssignmentDetail />} />
             <Route path="notes" element={<Notes />} />
             <Route path="notes/:noteId" element={<NoteDetail />} />
+            <Route path="attendance" element={<StudentAttendance />} />
             <Route path="leaderboard" element={<Leaderboard />} />
           </Routes>
         </main>

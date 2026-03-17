@@ -131,7 +131,18 @@ STEP 2.3 — Configure Environment Variables
     JWT_SECRET=                ← change to something random for production
     GEMINI_KEY_1=              ← get from Google AI Studio (ai.google.dev)
     EMAIL_USER=                ← your Gmail address for sending emails
-    EMAIL_PASS=                ← Gmail App Password (not your normal password)
+    EMAIL_PASS=                ← Gmail App Password (not your normal password)*
+    
+    * HOW TO GET A GMAIL APP PASSWORD:
+      1. Go to Google Account → Security (https://myaccount.google.com/security)
+      2. Enable "2-Step Verification" if not already on.
+      3. Search for "App passwords" in the top search bar.
+      4. Create a new app password (name it "CodeGurukul").
+      5. Copy the 16-character password and paste it here (no spaces).
+      
+      Note: You can update this later anytime by running: 
+            how_to_deploy/11_update_email_credentials.bat
+            
     ADMIN_EMAIL=admin@codegurukul.dev
     ADMIN_PASSWORD=admin
 
@@ -318,6 +329,7 @@ TROUBLESHOOTING:
   │ 8_start_frontend_dev.bat            │ Start frontend dev server (port 5173)│
   │ 9_restart_backend.bat               │ Kill port 5000 + restart Node server │
   │ 10_full_fresh_deploy.bat            │ Full automated setup (first time)    │
+  │ 11_update_email_credentials.bat     │ Update Gmail config for sending mail │
   ├─────────────────────────────────────┼──────────────────────────────────────┤
   │ server_start.bat   (root folder)    │ Start full server stack + ngrok      │
   │ install_compilers.bat (root folder) │ Install Go, R for code execution     │

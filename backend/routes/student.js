@@ -9,6 +9,58 @@ const { Note, StudentSession } = require('../models/mongo');
 router.use(auth, requireRole('student'));
 
 // ==========================================
+// NOTIFICATIONS / RECENT ACTIVITY
+// ==========================================
+router.get('/recent-activity', async (req, res) => {
+  try {
+    const studentId = req.user.id;
+    
+    // 1. Fetch Lab Assignment Submissions (Group by assignment to show unique labs)
+    const assignments = await sequelize.query(`
+      SELECT DISTINCT ON (la.id) 'assignment' as type, la.title, sas.submitted_at as created_at, s.name as subject_name, sas.id as id
+      FROM "StudentAssignmentSubmissions" sas
+      JOIN "AssignmentQuestions" aq ON sas.question_id = aq.id
+      JOIN "AssignmentSets" aset ON aq.set_id = aset.id
+      JOIN "LabAssignments" la ON aset.assignment_id = la.id
+      JOIN "Subjects" s ON la.subject_id = s.id
+      WHERE sas.student_id = :sid
+      ORDER BY la.id, sas.submitted_at DESC
+      LIMIT 5
+    `, { replacements: { sid: studentId }, type: sequelize.QueryTypes.SELECT });
+
+    // 2. Fetch Quiz Submissions
+    const quizzes = await sequelize.query(`
+      SELECT 'quiz' as type, q.title, sqs.submitted_at as created_at, s.name as subject_name, sqs.id as id
+      FROM "StudentQuizSubmissions" sqs
+      JOIN "Quizzes" q ON sqs.quiz_id = q.id
+      JOIN "Subjects" s ON q.subject_id = s.id
+      WHERE sqs.student_id = :sid
+      ORDER BY sqs.submitted_at DESC
+      LIMIT 5
+    `, { replacements: { sid: studentId }, type: sequelize.QueryTypes.SELECT });
+
+    // Combine and sort
+    const allActivity = [...assignments, ...quizzes]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 10);
+
+    // Map to a consistent format for the notification dropdown
+    const formatted = allActivity.map(act => ({
+      id: act.id,
+      title: act.type === 'assignment' ? `Solved Lab: ${act.title}` : `Finished Quiz: ${act.title}`,
+      subject: act.subject_name,
+      created_at: act.created_at,
+      type: act.type
+    }));
+
+    res.json(formatted);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ==========================================
 // SESSION TRACKING
 // ==========================================
 router.post('/login-session', async (req, res) => {
@@ -73,6 +125,48 @@ router.get('/my-timetable', async (req, res) => {
 });
 
 // ==========================================
+// GET /api/student/current-lab
+// ==========================================
+router.get('/current-lab', async (req, res) => {
+  try {
+    const profile = await StudentProfile.findOne({ where: { user_id: req.user.id } });
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const today = days[new Date().getDay()];
+    const nowHours = new Date().getHours().toString().padStart(2, '0');
+    const nowMinutes = new Date().getMinutes().toString().padStart(2, '0');
+    const currentTime = `${nowHours}:${nowMinutes}:00`;
+
+    let slots = [];
+    
+    if (profile.lab_id) {
+      slots = await sequelize.query(`
+        SELECT ls.is_unrestricted
+        FROM "LabSlots" ls
+        WHERE ls.lab_id = :lid AND ls.day = :today 
+          AND ls.start_time <= :currentTime AND ls.end_time >= :currentTime
+      `, { replacements: { lid: profile.lab_id, today, currentTime }, type: sequelize.QueryTypes.SELECT });
+      
+      if (slots.length > 0) return res.json({ is_unrestricted: slots[0].is_unrestricted });
+    }
+
+    if (profile.minor_lab_id) {
+      slots = await sequelize.query(`
+        SELECT mls.is_unrestricted
+        FROM "MinorLabSlots" mls
+        WHERE mls.minor_lab_id = :mid AND mls.day = :today 
+          AND mls.start_time <= :currentTime AND mls.end_time >= :currentTime
+      `, { replacements: { mid: profile.minor_lab_id, today, currentTime }, type: sequelize.QueryTypes.SELECT });
+      
+      if (slots.length > 0) return res.json({ is_unrestricted: slots[0].is_unrestricted });
+    }
+
+    res.json({ is_unrestricted: false });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ==========================================
 // GET /api/student/dashboard
 // ==========================================
 router.get('/dashboard', async (req, res) => {
@@ -97,11 +191,11 @@ router.get('/dashboard', async (req, res) => {
     
     console.log('[Dashboard] Profile found: class_id=' + classId + ', minor_subject_id=' + minorSubjectId);
 
-    // Find major subjects
+    // Find major & VSC subjects
     const majorCountQuery = await sequelize.query(`
       SELECT COUNT(DISTINCT subject_id) as count 
       FROM "TeacherSubjects" 
-      WHERE class_id = :cid AND type = 'major'
+      WHERE class_id = :cid AND (type = 'major' OR type = 'vsc')
     `, { replacements: { cid: classId }, type: sequelize.QueryTypes.SELECT });
     const majorCount = parseInt(majorCountQuery[0].count, 10);
     console.log('[Dashboard] Major subject count:', majorCount);
@@ -109,30 +203,78 @@ router.get('/dashboard', async (req, res) => {
     // Minor subjects (if exists)
     const totalSubjects = minorSubjectId ? majorCount + 1 : majorCount;
 
-    // Assignment count for these subjects (published only)
-    const assignmentQuery = await sequelize.query(`
-      SELECT COUNT(*) as count 
-      FROM "LabAssignments"
-      WHERE status = 'published' AND class_id = :cid
-    `, { replacements: { cid: classId }, type: sequelize.QueryTypes.SELECT });
-    const assignmentCount = parseInt(assignmentQuery[0].count, 10);
-    console.log('[Dashboard] Assignment count:', assignmentCount);
-
-    // Note count for these subjects (published only)
-    const noteCount = await Note.countDocuments({
-      status: 'published',
-      class_id: classId
+    // 1. Assignment Count (Active/Incomplete Labs)
+    const allAssignments = await sequelize.query(`
+      SELECT la.id, la.target_labs, aq.id as question_id, sas.id as submission_id
+      FROM "LabAssignments" la
+      JOIN "AssignmentSets" aset ON la.id = aset.assignment_id
+      JOIN "AssignmentQuestions" aq ON aset.id = aq.set_id
+      LEFT JOIN "StudentAssignmentSubmissions" sas ON aq.id = sas.question_id AND sas.student_id = :sid
+      WHERE la.status = 'published' AND (la.class_id = :cid OR la.subject_id = :msid OR EXISTS (
+        SELECT 1 FROM "TeacherSubjects" ts WHERE ts.subject_id = la.subject_id AND ts.class_id = :cid AND ts.type = 'vsc'
+      ))
+    `, { 
+      replacements: { cid: classId, msid: minorSubjectId, sid: req.user.id }, 
+      type: sequelize.QueryTypes.SELECT 
     });
-    console.log('[Dashboard] Note count:', noteCount);
 
-    // Quiz count
-    const quizQuery = await sequelize.query(`
-      SELECT COUNT(*) as count 
-      FROM "Quizzes"
-      WHERE status = 'published' AND class_id = :cid
-    `, { replacements: { cid: classId }, type: sequelize.QueryTypes.SELECT });
-    const quizCount = parseInt(quizQuery[0].count, 10);
-    console.log('[Dashboard] Quiz count:', quizCount);
+    // Filter by target_labs and find assignments with at least one missing submission
+    const assignmentMap = {};
+    allAssignments.forEach(row => {
+      // Lab batch filtering
+      let targeted = true;
+      if (row.target_labs && Array.isArray(row.target_labs) && row.target_labs.length > 0) {
+        const labs = row.target_labs.map(String);
+        targeted = labs.includes(String(profile.lab_id)) || labs.includes(String(profile.minor_lab_id));
+      }
+
+      if (targeted) {
+        if (!assignmentMap[row.id]) assignmentMap[row.id] = { total: 0, submitted: 0 };
+        assignmentMap[row.id].total++;
+        if (row.submission_id) assignmentMap[row.id].submitted++;
+      }
+    });
+
+    const activeAssignments = Object.values(assignmentMap).filter(a => a.submitted < a.total).length;
+    console.log('[Dashboard] Accurate Active Assignments:', activeAssignments);
+
+    // 2. Note Count
+    let notes = await Note.find({
+      status: 'published',
+      $or: [
+        { class_id: classId },
+        { subject_id: minorSubjectId }
+      ]
+    });
+
+    const filteredNotes = notes.filter(n => {
+      if (!n.target_labs || n.target_labs.length === 0) return true;
+      return n.target_labs.includes(profile.lab_id) || n.target_labs.includes(profile.minor_lab_id);
+    });
+    const noteCount = filteredNotes.length;
+    console.log('[Dashboard] Accurate Note Count:', noteCount);
+
+    // 3. Quiz Count (Not yet attempted)
+    const quizzes = await sequelize.query(`
+      SELECT q.id, q.target_labs, sqs.id as submission_id
+      FROM "Quizzes" q
+      LEFT JOIN "StudentQuizSubmissions" sqs ON q.id = sqs.quiz_id AND sqs.student_id = :sid
+      WHERE q.status = 'published' AND (q.class_id = :cid OR q.subject_id = :msid OR EXISTS (
+        SELECT 1 FROM "TeacherSubjects" ts WHERE ts.subject_id = q.subject_id AND ts.class_id = :cid AND ts.type = 'vsc'
+      ))
+      AND sqs.id IS NULL
+    `, { 
+      replacements: { cid: classId, msid: minorSubjectId, sid: req.user.id }, 
+      type: sequelize.QueryTypes.SELECT 
+    });
+
+    const filteredQuizzes = quizzes.filter(q => {
+      if (!q.target_labs || !Array.isArray(q.target_labs) || q.target_labs.length === 0) return true;
+      const labs = q.target_labs.map(String);
+      return labs.includes(String(profile.lab_id)) || labs.includes(String(profile.minor_lab_id));
+    });
+    const quizCount = filteredQuizzes.length;
+    console.log('[Dashboard] Accurate Quiz Count:', quizCount);
 
     const result = {
       roll_no: profile.roll_no,
@@ -141,7 +283,7 @@ router.get('/dashboard', async (req, res) => {
       minor_subject_name: profile.MinorSubject?.name,
       stats: {
         totalSubjects,
-        activeAssignments: assignmentCount,
+        activeAssignments: activeAssignments,
         publishedNotes: noteCount,
         activeQuizzes: quizCount
       }
@@ -165,16 +307,20 @@ router.get('/subjects', async (req, res) => {
     if (!profile) return res.status(404).json({ error: 'Student profile not found' });
 
     const rows = await sequelize.query(`
-      SELECT s.id as subject_id, s.name as subject_name, ts.type, u.name as teacher_name
+      SELECT DISTINCT ON (s.id) 
+             s.id as subject_id, s.name as subject_name, ts.type, u.name as teacher_name
       FROM "TeacherSubjects" ts
       JOIN "Subjects" s ON ts.subject_id = s.id
       JOIN "Users" u ON ts.teacher_id = u.id
-      WHERE (ts.class_id = :cid AND ts.type = 'major')
+      LEFT JOIN "LabSlots" ls ON ls.subject_id = s.id AND ls.lab_id = :lid AND ls.teacher_id = ts.teacher_id
+      WHERE (ts.class_id = :cid AND (ts.type = 'major' OR ts.type = 'vsc'))
          OR (ts.subject_id = :msid AND ts.type = 'minor')
+      ORDER BY s.id, (CASE WHEN ls.id IS NOT NULL THEN 0 ELSE 1 END), ts.created_at DESC
     `, {
       replacements: {
         cid: profile.class_id,
-        msid: profile.minor_subject_id || 0
+        msid: profile.minor_subject_id || 0,
+        lid: profile.lab_id || 0
       },
       type: sequelize.QueryTypes.SELECT
     });
@@ -197,18 +343,26 @@ router.get('/subjects/:id', async (req, res) => {
     const profile = await StudentProfile.findOne({ where: { user_id: req.user.id } });
     if (!profile) return res.status(404).json({ error: 'Student profile not found' });
 
-    // Get Subject Info
+    // Get Subject Info (Prioritize teacher assigned to student's lab slot)
     const subjectQuery = await sequelize.query(`
-        SELECT s.id, s.name, ts.type, u.name as teacher_name
+        SELECT DISTINCT ON (s.id)
+               s.id, s.name, ts.type, u.name as teacher_name
         FROM "TeacherSubjects" ts
         JOIN "Subjects" s ON ts.subject_id = s.id
         JOIN "Users" u ON ts.teacher_id = u.id
+        LEFT JOIN "LabSlots" ls ON ls.subject_id = s.id AND ls.lab_id = :lid AND ls.teacher_id = ts.teacher_id
         WHERE s.id = :sid AND (
-          (ts.class_id = :cid AND ts.type = 'major') OR
+          (ts.class_id = :cid AND (ts.type = 'major' OR ts.type = 'vsc')) OR
           (ts.subject_id = :msid AND ts.type = 'minor')
         )
+        ORDER BY s.id, (CASE WHEN ls.id IS NOT NULL THEN 0 ELSE 1 END), ts.created_at DESC
       `, {
-      replacements: { sid: subjectId, cid: profile.class_id, msid: profile.minor_subject_id || 0 },
+      replacements: { 
+        sid: subjectId, 
+        cid: profile.class_id, 
+        msid: profile.minor_subject_id || 0,
+        lid: profile.lab_id || 0
+      },
       type: sequelize.QueryTypes.SELECT
     });
 
@@ -313,7 +467,9 @@ router.get('/assignments', async (req, res) => {
       JOIN "Subjects" s ON la.subject_id = s.id
       JOIN "Users" u ON la.teacher_id = u.id
       WHERE la.status = 'published' AND (
-        la.class_id = :cid OR la.subject_id = :msid
+        la.class_id = :cid OR la.subject_id = :msid OR EXISTS (
+          SELECT 1 FROM "TeacherSubjects" ts WHERE ts.subject_id = la.subject_id AND ts.class_id = :cid AND ts.type = 'vsc'
+        )
       )
       ORDER BY la.created_at DESC
     `, {
@@ -341,11 +497,18 @@ router.get('/notes', async (req, res) => {
     const profile = await StudentProfile.findOne({ where: { user_id: req.user.id } });
     if (!profile) return res.status(404).json({ error: 'Profile not found' });
 
+    // For notes, we need to check if the subject is a VSC for this class
+    const vscSubjects = await sequelize.query(`
+      SELECT subject_id FROM "TeacherSubjects" WHERE class_id = :cid AND type = 'vsc'
+    `, { replacements: { cid: profile.class_id }, type: sequelize.QueryTypes.SELECT });
+    const vscSubjectIds = vscSubjects.map(v => v.subject_id);
+
     let notes = await Note.find({
       status: 'published',
       $or: [
         { class_id: profile.class_id },
-        { subject_id: profile.minor_subject_id || 0 }
+        { subject_id: profile.minor_subject_id || 0 },
+        { subject_id: { $in: vscSubjectIds } }
       ]
     }).sort({ createdAt: -1 });
 
@@ -661,6 +824,9 @@ router.get('/leaderboard', async (req, res) => {
       SELECT 
         u."id" as "student_id", 
         u."name" as "student_name",
+        u."profile_image" as "profile_image",
+        u."email" as "student_email",
+        md5(lower(trim(u."email"))) as "gravatar_hash",
         COALESCE(l."lab_score", 0) as "lab_score",
         COALESCE(q."quiz_score", 0) as "quiz_score",
         COALESCE(l."lab_max", 0) as "lab_max",
@@ -671,14 +837,26 @@ router.get('/leaderboard', async (req, res) => {
           ELSE COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0)
         END as "total_score",
         CASE
-          WHEN :taskType = 'lab' THEN 
-            CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0)::float / l."lab_max") * 100 ELSE 0 END
-          WHEN :taskType = 'quiz' THEN 
-            CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0)::float / q."quiz_max") * 100 ELSE 0 END
-          ELSE
-            CASE WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
-                 THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0))::float / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))) * 100 
-                 ELSE 0 END
+          WHEN (CASE
+            WHEN :taskType = 'lab' THEN 
+              CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0)::float / l."lab_max") * 100 ELSE 0 END
+            WHEN :taskType = 'quiz' THEN 
+              CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0)::float / q."quiz_max") * 100 ELSE 0 END
+            ELSE
+              CASE WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
+                   THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0))::float / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))) * 100 
+                   ELSE 0 END
+          END) > 100 THEN 100
+          ELSE (CASE
+            WHEN :taskType = 'lab' THEN 
+              CASE WHEN COALESCE(l."lab_max", 0) > 0 THEN (COALESCE(l."lab_score", 0)::float / l."lab_max") * 100 ELSE 0 END
+            WHEN :taskType = 'quiz' THEN 
+              CASE WHEN COALESCE(q."quiz_max", 0) > 0 THEN (COALESCE(q."quiz_score", 0)::float / q."quiz_max") * 100 ELSE 0 END
+            ELSE
+              CASE WHEN (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0)) > 0 
+                   THEN ((COALESCE(l."lab_score", 0) + COALESCE(q."quiz_score", 0))::float / (COALESCE(l."lab_max", 0) + COALESCE(q."quiz_max", 0))) * 100 
+                   ELSE 0 END
+          END)
         END as "accuracy"
       FROM "Users" u
       JOIN "StudentProfiles" sp ON u."id" = sp."user_id"
@@ -1053,6 +1231,83 @@ router.post('/assignments/submit', async (req, res) => {
   } catch (err) {
     console.error('Assignment submission error:', err);
     res.status(500).json({ error: 'Server error during submission', detail: err.message });
+  }
+});
+
+// ==========================================
+// ATTENDANCE STATISTICS
+// ==========================================
+router.get('/attendance', async (req, res) => {
+  try {
+    const studentId = req.user.id;
+    const profile = await StudentProfile.findOne({ where: { user_id: studentId } });
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+    // Get all unique subjects student is enrolled in
+    const subjects = await sequelize.query(`
+      SELECT DISTINCT ON (s.id) s.id, s.name, ts.type
+      FROM "TeacherSubjects" ts
+      JOIN "Subjects" s ON ts.subject_id = s.id
+      WHERE (ts.class_id = :cid AND (ts.type = 'major' OR ts.type = 'vsc'))
+         OR (ts.subject_id = :msid AND ts.type = 'minor')
+      ORDER BY s.id
+    `, {
+      replacements: { cid: profile.class_id, msid: profile.minor_subject_id || 0 },
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    const stats = [];
+    for (const sub of subjects) {
+      const attendance = await sequelize.query(`
+        SELECT 
+          COUNT(CASE WHEN status = 'present' THEN 1 END) as present,
+          COUNT(*) as total
+        FROM "Attendances"
+        WHERE student_id = :sid AND subject_id = :subid
+      `, {
+        replacements: { sid: studentId, subid: sub.id },
+        type: sequelize.QueryTypes.SELECT
+      });
+
+      stats.push({
+        subject_id: sub.id,
+        subject_name: sub.name,
+        type: sub.type,
+        present: parseInt(attendance[0].present, 10),
+        total: parseInt(attendance[0].total, 10)
+      });
+    }
+
+    res.json(stats);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/attendance/:subjectId', async (req, res) => {
+  try {
+    const studentId = req.user.id;
+    const subjectId = req.params.subjectId;
+
+    const records = await sequelize.query(`
+      SELECT a.date, a.status, u.name as teacher_name, 
+             l.name as lab_name, ml.name as minor_lab_name
+      FROM "Attendances" a
+      LEFT JOIN "Users" u ON a.teacher_id = u.id
+      LEFT JOIN "Labs" l ON a.lab_id = l.id
+      LEFT JOIN "MinorLabs" ml ON a.minor_lab_id = ml.id
+      WHERE a.student_id = :sid AND a.subject_id = :subid
+      ORDER BY a.date DESC
+    `, {
+      replacements: { sid: studentId, subid: subjectId },
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    res.json(records);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 

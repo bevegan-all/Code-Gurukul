@@ -213,15 +213,24 @@ const Leaderboard = () => {
                     )}
                   </div>
                   <div className="col-span-5 font-semibold text-gray-800 flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 text-sm font-bold capitalize">
-                      {student.student_name[0]}
-                    </div>
+                    {(student.profile_image || student.profileImage || student.student_image || student.gravatar_hash) ? (
+                      <img 
+                        src={student.profile_image || student.profileImage || student.student_image || `https://www.gravatar.com/avatar/${student.gravatar_hash}?d=identicon`} 
+                        alt="" 
+                        referrerPolicy="no-referrer"
+                        className="w-9 h-9 rounded-full object-cover border border-gray-100"
+                      />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 text-sm font-bold capitalize">
+                        {student.student_name[0]}
+                      </div>
+                    )}
                     <span className="truncate">{student.student_name}</span>
                   </div>
                   <div className="col-span-3 flex justify-center">
                     <div className="text-center">
                       <div className="text-lg font-bold text-gray-900 leading-none">
-                        {Math.round(student.accuracy)}%
+                        {Number(student.accuracy).toFixed(1)}%
                       </div>
                       <div className="mt-1.5 w-16 h-1 bg-gray-100 rounded-full overflow-hidden">
                         <div 

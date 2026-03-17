@@ -17,27 +17,53 @@ const Login = () => {
     setLoading(true);
 
     try {
-      // In development, you might want to mock this if the backend isn't linked via Vite proxy yet
       const res = await api.post('/auth/login', { email, password });
-      
-      const { user, accessToken, refreshToken } = res.data;
-      
-      localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('refreshToken', refreshToken);
-      localStorage.setItem('user', JSON.stringify(user));
-
-      if (user.role === 'admin') navigate('/admin');
-      else if (user.role === 'teacher') navigate('/teacher');
-      else if (user.role === 'student') navigate('/student');
-      else navigate('/');
-
+      finalizeLogin(res.data);
     } catch (err) {
-      console.error(err);
       setError(err.response?.data?.error || 'Failed to login');
     } finally {
       setLoading(false);
     }
   };
+
+  const finalizeLogin = (data) => {
+    const { user, accessToken, refreshToken } = data;
+    localStorage.setItem('accessToken', accessToken);
+    localStorage.setItem('refreshToken', refreshToken);
+    localStorage.setItem('user', JSON.stringify(user));
+
+    if (user.role === 'admin') navigate('/admin');
+    else if (user.role === 'teacher') navigate('/teacher');
+    else if (user.role === 'student') navigate('/student');
+    else navigate('/');
+  };
+
+  const handleGoogleResponse = async (response) => {
+    try {
+      setLoading(true);
+      setError('');
+      const res = await api.post('/auth/google-login', { idToken: response.credential });
+      finalizeLogin(res.data);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Google authentication failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    /* global google */
+    if (typeof google !== 'undefined') {
+      google.accounts.id.initialize({
+        client_id: "335788715432-81asec4ps29ice5hmpl58b7grv0495er.apps.googleusercontent.com",
+        callback: handleGoogleResponse
+      });
+      google.accounts.id.renderButton(
+        document.getElementById("googleBtn"),
+        { theme: "outline", size: "large", width: "100%", text: "continue_with" }
+      );
+    }
+  }, []);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 from-primary/10 to-transparent bg-gradient-to-br">
@@ -111,6 +137,14 @@ const Login = () => {
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Log in'}
           </button>
         </form>
+
+        <div className="my-6 flex items-center gap-4">
+          <div className="flex-1 h-px bg-gray-200"></div>
+          <span className="text-xs font-bold text-gray-400 tracking-widest uppercase">Or</span>
+          <div className="flex-1 h-px bg-gray-200"></div>
+        </div>
+
+        <div id="googleBtn" className="w-full h-[44px] overflow-hidden rounded-lg"></div>
       </div>
     </div>
   );

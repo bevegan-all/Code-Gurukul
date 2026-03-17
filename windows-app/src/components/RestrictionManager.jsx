@@ -15,25 +15,30 @@ const RestrictionManager = () => {
     const user = JSON.parse(userStr);
 
     // 1. Initial Restriction Check
-    api.get('/teacher/current-lab')
-      .then(res => {
-        if (res.data) {
-          const unrestricted = !!res.data.is_unrestricted;
-          if (window.electronAPI?.setRestrictionMode) {
-            window.electronAPI.setRestrictionMode(unrestricted);
-          }
-        }
-      })
-      .catch(err => console.error('Error fetching initial lab status:', err));
+    // Intentionally skipped to enforce strict lockdown on boot.
+    // The teacher MUST manually click "Unrestrict" during the live session to unlock keys.
 
     // 2. Monitoring & Restriction Socket
     const socket = io(SOCKET_URL, { 
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
+      extraHeaders: { 'ngrok-skip-browser-warning': 'true' },
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: Infinity,
     });
     socketRef.current = socket;
+
+    socket.on('connect', () => {
+      console.log('Connected to socket server');
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Disconnected from socket server');
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
+    });
 
     let pingInterval = null;
     let screenshotInterval = null;
@@ -106,6 +111,17 @@ const RestrictionManager = () => {
     socket.on('teacher:stop_watching', () => {
       isWatching = false;
       if (screenshotInterval) clearTimeout(screenshotInterval);
+    });
+
+    socket.on('teacher:request_status', () => {
+      console.log('Teacher requested status, reporting online...');
+      socket.emit('student:online', {
+        studentId: user.id,
+        studentName: user.name,
+        rollNo: user.roll_no,
+        classId: user.class_id,
+        activity: isCurrentlyIdle ? 'Idle' : 'Active'
+      });
     });
 
     socket.on('lab:restriction_status', (data) => {

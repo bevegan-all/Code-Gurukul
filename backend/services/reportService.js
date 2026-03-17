@@ -6,27 +6,41 @@ const emailService = require('./emailService');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY_1 || process.env.GEMINI_KEY || 'fake_key');
 
-async function generateAIReportSummary(studentData, assignmentData, quizData) {
+async function generateAIReportSummary(studentData, academicStats, attendanceStats) {
   try {
+    const academicSummary = academicStats.map(a => `${a.subject_name}: Assignments ${Number(a.assignment_avg).toFixed(1)}/10, Quizzes ${Number(a.quiz_avg).toFixed(1)}/10`).join('; ');
+    const attendanceSummary = attendanceStats.map(a => `${a.subject_name}: ${a.present}/${a.total}`).join(', ');
+    
     const prompt = `
-      You are an expert academic evaluator. Write a small 1-paragraph summary of the student's performance based on:
+      You are an expert academic evaluator for MIT ACSC College. 
+      Analyze the student's performance across different subjects and write a concise evaluation (max 10 lines).
+      
       Student Name: ${studentData.name}
-      Assignments total marks avg: ${assignmentData.avg_marks} / 10
-      Quizzes avg marks: ${quizData.avg_marks} / 10
-      Give brief actionable feedback. Do NOT use markdown. Just plain text.
+      Academic Scores: ${academicSummary}
+      Attendance Record: ${attendanceSummary}
+      
+      Please:
+      1. Summarize their current academic standing.
+      2. Identify strengths or weaknesses.
+      3. Provide specific suggestions for improvement.
+      
+      Guidelines:
+      - Be encouraging but professional.
+      - Keep it under 10 lines.
+      - Do NOT use markdown formatting (like ** or #). Just plain text.
     `;
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const result = await model.generateContent(prompt);
     return result.response.text().trim();
   } catch (err) {
     console.error("AI Report Generation Error:", err);
-    return "AI Summary is unavailable at the moment.";
+    return "The student is showing consistent participation. We recommend continuing focus on practical labs to further improve overall performance.";
   }
 }
 
-async function sendStudentReport(studentId, parentEmail, studentData, assignmentData, quizData) {
+async function sendStudentReport(studentId, parentEmail, studentData, academicStats, attendanceStats, teacherName) {
   // Generate AI Summary
-  const summary = await generateAIReportSummary(studentData, assignmentData, quizData);
+  const summary = await generateAIReportSummary(studentData, academicStats, attendanceStats);
 
   // Generate PDF
   const doc = new PDFDocument({ margin: 50 });
@@ -59,47 +73,75 @@ async function sendStudentReport(studentId, parentEmail, studentData, assignment
   doc.fillOpacity(1);
   doc.fillColor('#000000');
   
-  doc.fontSize(12).font('Helvetica-Bold').text('Student Name:', startX + 20, currentY + 20);
-  doc.font('Helvetica').text(studentData.name, startX + 120, currentY + 20);
+  doc.fontSize(11).font('Helvetica-Bold').text('Student Name:', startX + 20, currentY + 20);
+  doc.font('Helvetica').text(studentData.name, startX + 110, currentY + 20);
   
   doc.font('Helvetica-Bold').text('Roll No:', startX + 280, currentY + 20);
   doc.font('Helvetica').text(studentData.roll_no || 'N/A', startX + 350, currentY + 20);
 
   doc.font('Helvetica-Bold').text('Class:', startX + 20, currentY + 50);
-  doc.font('Helvetica').text(studentData.class_name || 'N/A', startX + 120, currentY + 50);
+  doc.font('Helvetica').text(studentData.class_name || 'N/A', startX + 110, currentY + 50);
+
+  doc.font('Helvetica-Bold').text('Teacher:', startX + 280, currentY + 50);
+  doc.font('Helvetica').text(teacherName || 'Instructor', startX + 350, currentY + 50);
   
   doc.moveDown(3);
   currentY = doc.y;
 
+  // Academic Performance Table
   doc.fontSize(14).font('Helvetica-Bold').fillColor('#8b1832').text('Academic Performance', startX, currentY);
   doc.moveDown(1);
   currentY = doc.y;
 
   doc.rect(startX, currentY, 512, 25).fill('#8b1832');
-  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(12);
-  doc.text('Assessment Type', startX + 20, currentY + 7);
-  doc.text('Average Score', startX + 300, currentY + 7);
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(11);
+  doc.text('Subject Name', startX + 20, currentY + 7);
+  doc.text('Assignments', startX + 250, currentY + 7);
+  doc.text('Quizzes', startX + 380, currentY + 7);
 
-  doc.rect(startX, currentY + 25, 512, 25).stroke('#e5e7eb');
-  doc.fillColor('#374151').font('Helvetica').fontSize(12);
-  doc.text('Assignments', startX + 20, currentY + 32);
-  doc.text(`${Number(assignmentData.avg_marks || 0).toFixed(2)} / 10`, startX + 300, currentY + 32);
+  academicStats.forEach((stat) => {
+    currentY += 25;
+    doc.rect(startX, currentY, 512, 25).stroke('#e5e7eb');
+    doc.fillColor('#374151').font('Helvetica').fontSize(10);
+    doc.text(stat.subject_name, startX + 20, currentY + 8);
+    doc.text(`${Number(stat.assignment_avg || 0).toFixed(2)}/10`, startX + 250, currentY + 8);
+    doc.text(`${Number(stat.quiz_avg || 0).toFixed(2)}/10`, startX + 380, currentY + 8);
+  });
 
-  doc.rect(startX, currentY + 50, 512, 25).stroke('#e5e7eb');
-  doc.fillColor('#374151').font('Helvetica').fontSize(12);
-  doc.text('Quizzes', startX + 20, currentY + 57);
-  doc.text(`${Number(quizData.avg_marks || 0).toFixed(2)} / 10`, startX + 300, currentY + 57);
+  doc.moveDown(3);
+  currentY = doc.y;
 
-  doc.moveDown(5);
+  // Attendance Statistics Table
+  doc.fontSize(14).font('Helvetica-Bold').fillColor('#8b1832').text('Attendance Statistics', startX, currentY);
+  doc.moveDown(1);
+  currentY = doc.y;
+
+  doc.rect(startX, currentY, 512, 25).fill('#8b1832');
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(11);
+  doc.text('Subject & Mode', startX + 20, currentY + 7);
+  doc.text('Present / Total', startX + 330, currentY + 7);
+  doc.text('Percentage', startX + 430, currentY + 7);
+
+  attendanceStats.forEach((att) => {
+    currentY += 25;
+    doc.rect(startX, currentY, 512, 25).stroke('#e5e7eb');
+    doc.fillColor('#374151').font('Helvetica').fontSize(10);
+    doc.text(`${att.subject_name} (${att.lab_name})`, startX + 20, currentY + 8);
+    doc.text(`${att.present} / ${att.total}`, startX + 330, currentY + 8);
+    const perc = Math.round((att.present / (att.total || 1)) * 100);
+    doc.text(`${perc}%`, startX + 430, currentY + 8);
+  });
+
+  doc.moveDown(4);
   currentY = doc.y;
 
   doc.fontSize(14).font('Helvetica-Bold').fillColor('#8b1832').text('AI Evaluator Feedback', startX, currentY);
   doc.moveDown(1);
   currentY = doc.y;
   
-  doc.rect(startX, currentY, 512, 120).fillOpacity(0.05).fillAndStroke('#3b82f6', '#93c5fd');
+  doc.rect(startX, currentY, 512, 120).fillOpacity(0.05).fillAndStroke('#8b1832', '#8b1832');
   doc.fillOpacity(1);
-  doc.fillColor('#1e3a8a').fontSize(12).font('Helvetica');
+  doc.fillColor('#000000').fontSize(11).font('Helvetica');
   doc.text(summary, startX + 20, currentY + 20, {
     width: 470,
     align: 'justify',

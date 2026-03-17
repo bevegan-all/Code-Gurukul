@@ -30,13 +30,19 @@ router.post('/message', async (req, res) => {
     }
 
     // Prepare prompt
-    const contextPrompt = `
-      You are an AI coding tutor in CodeGurukul. 
-      Student is currently in mode: ${session_type}. 
-      Student asks: ${message}
-      
-      Respond helpfully but DO NOT provide direct answers to assignments.
-    `;
+    let contextPrompt = `You are an AI coding tutor in CodeGurukul named Code Guru.\nStudent is currently in mode: ${session_type}.\n`;
+    
+    if (session_type === 'lab_coding') {
+      contextPrompt += `This is a strict LAB ASSIGNMENT environment. 
+      CRITICAL RULE: DO NOT provide direct code answers or complete solutions to the problem under any circumstances.
+      Instead, provide hints, explain concepts, ask guiding questions, and help the student debug their existing code.
+      If the student asks for the code, explicitly refuse and remind them they must solve it themselves.\n`;
+    } else {
+      contextPrompt += `This is a FREE PRACTICE environment (Free Sandbox).
+      You MAY provide complete code examples, direct answers, and full solutions if the student asks for them.\n`;
+    }
+
+    contextPrompt += `\nStudent asks: ${message}`;
     
     const reply = await geminiService.generateText(contextPrompt);
     

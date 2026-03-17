@@ -266,8 +266,8 @@ export default function LabWorkspace() {
     setChatbotUsageCount(prev => prev + 1);
 
     try {
-      // We package the user's current code together so Gemini has context
-      const promptWithContext = `Current Code:\n\`\`\`${language}\n${code}\n\`\`\`\n\nStudent asks: ${userMessage}`;
+      const currentQuestion = assignment?.sets?.[activeSetIndex]?.questions?.[activeQuestionIndex]?.question_text || 'No specific question context.';
+      const promptWithContext = `Current Question Context: ${currentQuestion}\n\nCurrent Code:\n\`\`\`${language}\n${code}\n\`\`\`\n\nStudent asks: ${userMessage}`;
 
       const res = await api.post('/chatbot/message', {
         session_type: 'lab_coding',
@@ -520,12 +520,12 @@ export default function LabWorkspace() {
           <div className="p-4 border-t border-slate-700">
             <button
               onClick={() => setIsChatOpen(!isChatOpen)}
-              aria-label={isChatOpen ? 'Close Gemini Guru chat panel' : 'Open Gemini Guru AI tutor chat panel'}
+              aria-label={isChatOpen ? 'Close Code Guru chat panel' : 'Open Code Guru AI tutor chat panel'}
               aria-expanded={isChatOpen}
               aria-controls="lab-chat-panel"
               className="w-full bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 py-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors"
             >
-              <Bot size={18} aria-hidden="true" /> Ask Gemini Guru {isChatOpen ? '(Open)' : '(Ctrl+G)'}
+              <Bot size={18} aria-hidden="true" /> Ask Code Guru {isChatOpen ? '(Open)' : '(Ctrl+G)'}
             </button>
           </div>
         </div>
@@ -672,17 +672,17 @@ export default function LabWorkspace() {
               transition={{ type: "spring", stiffness: 350, damping: 30 }}
               className="absolute top-0 right-0 h-full w-[400px] bg-slate-800 border-l border-slate-700 shadow-2xl flex flex-col z-40"
               role="complementary"
-              aria-label="Gemini Guru AI tutor chat"
+              aria-label="Code Guru AI tutor chat"
             >
               <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-indigo-900/40">
                 <h3 className="text-white font-bold flex items-center gap-2">
-                  <Bot className="text-indigo-400" aria-hidden="true" /> Gemini Guru
+                  <Bot className="text-indigo-400" aria-hidden="true" /> Code Guru
                 </h3>
                 <button
                   onClick={() => setIsChatOpen(false)}
                   className="text-slate-400 hover:text-white transition-colors"
                   title="Close AI Chat (Ctrl+G)"
-                  aria-label="Close Gemini Guru chat panel"
+                  aria-label="Close Code Guru chat panel"
                 >
                   <X size={20} aria-hidden="true" />
                 </button>
@@ -692,7 +692,7 @@ export default function LabWorkspace() {
                 className="flex-1 overflow-y-auto p-4 space-y-4"
                 role="log"
                 aria-live="polite"
-                aria-label="Gemini Guru chat messages"
+                aria-label="Code Guru chat messages"
                 aria-atomic="false"
               >
                 {chatMessages.length === 0 && (
@@ -741,7 +741,7 @@ export default function LabWorkspace() {
                   <button
                     type="submit"
                     disabled={isChatLoading || !chatInput.trim()}
-                    aria-label={isChatLoading ? 'Sending message, please wait' : 'Send message to Gemini Guru'}
+                    aria-label={isChatLoading ? 'Sending message, please wait' : 'Send message to Code Guru'}
                     aria-busy={isChatLoading}
                     className="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-lg transition-colors disabled:opacity-50"
                   >
