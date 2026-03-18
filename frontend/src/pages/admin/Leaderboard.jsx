@@ -73,7 +73,7 @@ export default function AdminLeaderboard() {
       {/* Header */}
       <div className="text-center">
         <Trophy className="w-14 h-14 text-yellow-500 mx-auto mb-3 drop-shadow-md" />
-        <h2 className="text-3xl font-black text-slate-800 tracking-tight">Admin Leaderboard</h2>
+        <h2 className="text-3xl font-black text-slate-800 tracking-tight">Student Leaderboard</h2>
         <p className="text-slate-500 mt-1 font-medium">Global student rankings by marks and accuracy</p>
       </div>
 

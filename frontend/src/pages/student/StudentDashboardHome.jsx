@@ -85,7 +85,7 @@ const StudentDashboardHome = () => {
             </div>
           </div>
           <p className="flex items-center gap-1.5 text-[10px] font-black text-purple-600 mt-6 relative uppercase tracking-tighter">
-            Pending lab assignment tasks
+            Lab Accuracy: {data.stats.avgAssignment || '0.0'}%
           </p>
         </div>
 
@@ -123,7 +123,7 @@ const StudentDashboardHome = () => {
             </div>
           </div>
           <p className="flex items-center gap-1.5 text-[10px] font-black text-orange-600 mt-6 relative uppercase tracking-tighter">
-            Pending quiz attempts
+            Quiz Accuracy: {data.stats.avgQuiz || '0.0'}%
           </p>
         </div>
 

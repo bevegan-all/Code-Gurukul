@@ -139,7 +139,7 @@ const DashboardHome = () => {
                     {idx !== recentActivity.length - 1 && <div className="w-0.5 grow bg-gray-100 mt-2"></div>}
                   </div>
                   <div className="flex-1 pb-4">
-                    <p className="text-sm font-semibold text-gray-800 leading-tight">{activity.description}</p>
+                    <p className="text-sm font-semibold text-gray-800 leading-tight">{activity.description || activity.action}</p>
                     <p className="text-xs text-gray-400 mt-1.5 flex flex-col gap-0.5">
                       <span className="font-medium text-gray-500">by {activity.name}</span>
                       <span>{new Date(activity.timestamp).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>

@@ -14,6 +14,7 @@ import QuizTaker from './pages/QuizTaker';
 import Leaderboard from './pages/Leaderboard';
 import FreeSandbox from './pages/FreeSandbox';
 import Attendance from './pages/Attendance';
+import ExternalTools from './pages/ExternalTools';
 import RestrictionManager from './components/RestrictionManager';
 
 function App() {
@@ -100,6 +101,7 @@ function App() {
            <Route path="attendance" element={<Attendance />} />
            <Route path="sandbox" element={<FreeSandbox />} />
            <Route path="quizzes" element={<Quizzes />} />
+           <Route path="external-tools" element={<ExternalTools />} />
            <Route path="leaderboard" element={<Leaderboard />} />
         </Route>
 

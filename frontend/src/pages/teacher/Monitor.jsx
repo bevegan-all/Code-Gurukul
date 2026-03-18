@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import api from '../../utils/axios';
-import { Activity, X, MonitorPlay, CheckCircle, Clock, Maximize2, Minimize2, Users, Zap, CheckSquare, Square } from 'lucide-react';
+import { Activity, X, MonitorPlay, CheckCircle, Clock, Maximize2, Minimize2, Users, Zap, CheckSquare, Square, Terminal } from 'lucide-react';
 
 const Monitor = () => {
   const [onlineStudents, setOnlineStudents] = useState(new Map());
@@ -16,12 +16,14 @@ const Monitor = () => {
   const [allSlotStudents, setAllSlotStudents] = useState([]); // Full student objects for offline list
   const [useCurrentSlotOnly, setUseCurrentSlotOnly] = useState(false);
   const [alerts, setAlerts] = useState([]); // List of {id, name, type: 'idle'}
+  const [grantedApps, setGrantedApps] = useState(new Map()); // {studentId: Set<appId>}
 
   // Attendance modals
   const [showManualAttModal, setShowManualAttModal] = useState(false);
   const [showAutoAttModal, setShowAutoAttModal] = useState(false);
   const [manualAttStatus, setManualAttStatus] = useState({}); // { [studentId]: 'present'|'absent' }
   const [attSaving, setAttSaving] = useState(false);
+  const [showGlobalAppDropdown, setShowGlobalAppDropdown] = useState(false);
   const [toast, setToast] = useState(null); // { type: 'success'|'error', msg: string }
 
   const socketRef = useRef(null);
@@ -226,6 +228,50 @@ const Monitor = () => {
     }
   };
 
+  const handleAppGrant = (studentId, appId, revoke = false) => {
+    setGrantedApps(prev => {
+      const next = new Map(prev);
+      const studentApps = next.get(studentId) || new Set();
+      if (revoke) {
+        studentApps.delete(appId);
+        socketRef.current?.emit('teacher:revoke_app', { studentId, appId });
+      } else {
+        studentApps.add(appId);
+        socketRef.current?.emit('teacher:grant_app', { studentId, appId });
+      }
+      next.set(studentId, studentApps);
+      return next;
+    });
+  };
+
+  const handleGlobalAppGrant = (appId, revoke = false) => {
+    if (!currentLabSlot || !currentLabSlot.class_id) return;
+    
+    // Always use classId to target the room via Socket 
+    if (revoke) {
+      socketRef.current?.emit('teacher:revoke_app', { classId: currentLabSlot.class_id, appId, global: true });
+      showToast('success', `Revoked ${appId} access from all students in current lab.`);
+    } else {
+      socketRef.current?.emit('teacher:grant_app', { classId: currentLabSlot.class_id, appId, global: true });
+      showToast('success', `Granted ${appId} access to all students in current lab.`);
+    }
+    
+    // Optimistically update visible student states
+    setGrantedApps(prev => {
+        const next = new Map(prev);
+        allSlotStudents.forEach(student => {
+            const studentApps = next.get(String(student.id)) || new Set();
+            if (revoke) {
+              studentApps.delete(appId);
+            } else {
+              studentApps.add(appId);
+            }
+            next.set(String(student.id), studentApps);
+        });
+        return next;
+    });
+  };
+
   // Handle ESC key exiting fullscreen
   useEffect(() => {
     const onFsChange = () => {
@@ -410,6 +456,46 @@ const Monitor = () => {
                 />
                 <span className="text-xs font-bold text-slate-600">Current Slot ({currentLabSlot.subject_name})</span>
               </label>
+
+              {/* Global App Grant Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowGlobalAppDropdown(!showGlobalAppDropdown)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-indigo-200 transition-colors"
+                >
+                  <Terminal size={12} /> Grant App Base
+                </button>
+                {showGlobalAppDropdown && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-[100] animate-in fade-in slide-in-from-top-2">
+                    <div className="px-3 py-2 bg-slate-50 border-b border-slate-100">
+                      <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Toggle Global Access</span>
+                    </div>
+                    {[
+                      { id: 'android-studio', name: 'Android Studio' },
+                      { id: 'blender', name: 'Blender 3D' },
+                      { id: 'mongodb-compass', name: 'MongoDB Compass' }
+                    ].map(app => {
+                      // Check if ALL students have it (to determine toggle state)
+                      const allHaveIt = allSlotStudents.length > 0 && allSlotStudents.every(st => grantedApps.get(String(st.id))?.has(app.id));
+
+                      return (
+                        <button
+                          key={app.id}
+                          onClick={() => handleGlobalAppGrant(app.id, allHaveIt)}
+                          className={`w-full text-left px-4 py-2 text-sm font-semibold transition-colors flex items-center justify-between ${
+                            allHaveIt 
+                              ? 'bg-indigo-50 text-indigo-700 hover:bg-rose-50 hover:text-rose-700' 
+                              : 'text-slate-700 hover:bg-indigo-50 hover:text-indigo-700'
+                          }`}
+                        >
+                          {app.name}
+                          {allHaveIt ? <CheckCircle size={14} className="text-indigo-500" /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
             </div>
           )}
@@ -587,6 +673,36 @@ const Monitor = () => {
               >
                 {isScreenMonitoring ? 'Stop Watching' : 'Start Watching'}
               </button>
+            </div>
+
+            {/* External App Permissions */}
+            <div className="px-5 py-3 border-b border-slate-200 bg-slate-50">
+              <h4 className="font-bold text-slate-700 mb-2 flex items-center gap-2 text-xs uppercase tracking-wider">
+                <Terminal size={14} className="text-indigo-500" /> App Permissions
+              </h4>
+              <div className="flex gap-2 flex-wrap">
+                {[
+                  { id: 'android-studio', name: 'Android Studio' },
+                  { id: 'blender', name: 'Blender 3D' },
+                  { id: 'mongodb-compass', name: 'MongoDB Compass' }
+                ].map(app => {
+                  const isGranted = grantedApps.get(selectedStudent.studentId)?.has(app.id);
+                  return (
+                    <button
+                      key={app.id}
+                      onClick={() => handleAppGrant(selectedStudent.studentId, app.id, isGranted)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                        isGranted 
+                          ? 'bg-indigo-100 border-indigo-200 text-indigo-700 shadow-inner hover:bg-rose-100 hover:text-rose-700 hover:border-rose-200'
+                          : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600'
+                      }`}
+                      title={isGranted ? 'Click to Revoke' : 'Click to Grant'}
+                    >
+                      {app.name} {isGranted && <CheckCircle size={12} className="inline ml-1" />}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* History */}

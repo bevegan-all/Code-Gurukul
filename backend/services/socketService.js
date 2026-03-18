@@ -142,5 +142,32 @@ module.exports = (io) => {
         io.to(`teacher_${data.classId}`).emit('student:screen_stream', data);
       }
     });
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // External App Granting Rules
+    // ─────────────────────────────────────────────────────────────────────────────
+    socket.on('teacher:grant_app', (data) => {
+      // data: { studentId, classId, appId, global: boolean }
+      if (data.global && data.classId) {
+        io.to(`class_${data.classId}`).emit('lab:grant_app', data);
+      } else if (data.studentId) {
+        const studentSocketId = studentSocketMap.get(String(data.studentId));
+        if (studentSocketId) {
+          io.to(studentSocketId).emit('lab:grant_app', data);
+        }
+      }
+    });
+
+    socket.on('teacher:revoke_app', (data) => {
+      // data: { studentId, classId, appId, global: boolean }
+      if (data.global && data.classId) {
+        io.to(`class_${data.classId}`).emit('lab:revoke_app', data);
+      } else if (data.studentId) {
+        const studentSocketId = studentSocketMap.get(String(data.studentId));
+        if (studentSocketId) {
+          io.to(studentSocketId).emit('lab:revoke_app', data);
+        }
+      }
+    });
   });
 };

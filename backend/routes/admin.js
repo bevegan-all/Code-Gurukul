@@ -61,8 +61,10 @@ router.get('/dashboard-stats', async (req, res) => {
       id: log.id,
       name: log.User?.name || 'System',
       action: log.action_type,
+      action_type: log.action_type, // for Header
       description: log.description,
-      timestamp: log.timestamp
+      timestamp: log.timestamp,
+      User: log.User // for Header
     }));
 
     res.json({ teachers, students, courses, departments, chartData, recentActivity });
@@ -306,7 +308,7 @@ router.post('/labs/:id/slots', async (req, res) => {
       teacher_id: teacher_id ? parseInt(teacher_id) : null, 
       subject_id: subject_id ? parseInt(subject_id) : null 
     });
-    // Lab instructors are tracked via LabSlots only — no TeacherSubject record needed.
+    await logAdminActivity(req.user.id, 'CREATE', `Added Lab Slot: ${day} ${start_time}-${end_time}`, { slot_id: slot.id });
     res.json(slot);
   } catch (err) {
     console.error('ERROR SAVING SLOT:', err);
@@ -323,7 +325,7 @@ router.put('/lab-slots/:id', async (req, res) => {
       teacher_id: teacher_id ? parseInt(teacher_id) : null, 
       subject_id: subject_id ? parseInt(subject_id) : null 
     }, { where: { id: req.params.id } });
-    // Lab instructors are tracked via LabSlots only — no TeacherSubject record needed.
+    await logAdminActivity(req.user.id, 'UPDATE', `Updated Lab Slot: ${day} ${start_time}`, { slot_id: req.params.id });
     res.json({ msg: 'Slot updated' });
   } catch (err) {
     console.error('ERROR UPDATING SLOT:', err);
@@ -333,7 +335,9 @@ router.put('/lab-slots/:id', async (req, res) => {
 
 router.delete('/lab-slots/:id', async (req, res) => {
   try {
+    const slot = await LabSlot.findByPk(req.params.id);
     await LabSlot.destroy({ where: { id: req.params.id } });
+    if (slot) await logAdminActivity(req.user.id, 'DELETE', `Removed Lab Slot: ${slot.day} ${slot.start_time}`, { slot_id: req.params.id });
     res.json({ msg: 'Slot deleted' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -406,20 +410,25 @@ router.post('/subjects/:id/minor-labs', async (req, res) => {
   try {
     const { name } = req.body;
     const lab = await MinorLab.create({ subject_id: req.params.id, name });
+    await logAdminActivity(req.user.id, 'CREATE', `Created Minor Lab: ${name} for Subject ID: ${req.params.id}`, { lab_id: lab.id });
     res.json(lab);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.put('/minor-labs/:id', async (req, res) => {
   try {
-    await MinorLab.update({ name: req.body.name }, { where: { id: req.params.id } });
+    const { name } = req.body;
+    await MinorLab.update({ name }, { where: { id: req.params.id } });
+    await logAdminActivity(req.user.id, 'UPDATE', `Updated Minor Lab Name to: ${name}`, { lab_id: req.params.id });
     res.json({ msg: 'Minor lab updated' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.delete('/minor-labs/:id', async (req, res) => {
   try {
+    const lab = await MinorLab.findByPk(req.params.id);
     await MinorLab.destroy({ where: { id: req.params.id } });
+    if (lab) await logAdminActivity(req.user.id, 'DELETE', `Deleted Minor Lab: ${lab.name}`, { lab_id: req.params.id });
     res.json({ msg: 'Minor lab deleted' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

@@ -4,14 +4,6 @@ import { BookOpen, FileCode2, NotebookPen, ClipboardList, Quote, Calendar, Troph
 import StudentHeader from '../components/StudentHeader';
 import api from '../api';
 
-const statCards = [
-  { label: 'My Subjects', key: 'totalSubjects', icon: <BookOpen size={28} aria-hidden="true" />, color: 'indigo', desc: 'Assigned automatically via enrollment', path: '/app/home' },
-  { label: 'Active Assignments', key: 'activeAssignments', icon: <FileCode2 size={28} aria-hidden="true" />, color: 'fuchsia', desc: 'Ready for Sandbox Lab', path: '/app/assignments' },
-  { label: 'Published Notes', key: 'publishedNotes', icon: <NotebookPen size={28} aria-hidden="true" />, color: 'emerald', desc: 'Latest study material', path: '/app/notes' },
-  { label: 'Active Quizzes', key: 'activeQuizzes', icon: <ClipboardList size={28} aria-hidden="true" />, color: 'orange', desc: 'Timed tests to evaluate knowledge', path: '/app/quizzes' },
-  { label: 'Overall Accuracy', key: 'overallAccuracy', icon: <Trophy size={28} aria-hidden="true" />, color: 'rose', desc: 'Performance across all tasks', path: '/app/leaderboard', suffix: '%' },
-];
-
 const colorMap = {
   indigo: { bg: 'bg-indigo-50', text: 'text-indigo-600', foot: 'text-slate-500' },
   fuchsia: { bg: 'bg-fuchsia-50', text: 'text-fuchsia-600', foot: 'text-fuchsia-600' },
@@ -26,6 +18,14 @@ export default function Home() {
   const [data, setData] = useState(null);
   const [attendance, setAttendance] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  const dynamicStatCards = [
+    { label: 'My Subjects', key: 'totalSubjects', icon: <BookOpen size={28} aria-hidden="true" />, color: 'indigo', desc: 'Active enrolled courses', path: '/app/home' },
+    { label: 'Active Labs', key: 'activeAssignments', icon: <FileCode2 size={28} aria-hidden="true" />, color: 'fuchsia', desc: `Lab Accuracy: ${data?.stats?.avgAssignment || '0.0'}%`, path: '/app/assignments' },
+    { label: 'Materials', key: 'publishedNotes', icon: <NotebookPen size={28} aria-hidden="true" />, color: 'emerald', desc: 'Latest study material', path: '/app/notes' },
+    { label: 'Quizzes', key: 'activeQuizzes', icon: <ClipboardList size={28} aria-hidden="true" />, color: 'orange', desc: `Quiz Accuracy: ${data?.stats?.avgQuiz || '0.0'}%`, path: '/app/quizzes' },
+    { label: 'Accuracy', key: 'overallAccuracy', icon: <Trophy size={28} aria-hidden="true" />, color: 'rose', desc: 'Overall Performance', path: '/app/leaderboard', suffix: '%' },
+  ];
 
   useEffect(() => {
     Promise.all([
@@ -62,7 +62,7 @@ export default function Home() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4 pt-4" role="list" aria-label="Dashboard statistics">
-              {statCards.map(card => {
+              {dynamicStatCards.map(card => {
                 const c = colorMap[card.color];
                 const value = data.stats?.[card.key] || 0;
                 return (

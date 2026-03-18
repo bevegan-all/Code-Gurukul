@@ -186,7 +186,9 @@ const OTPRequest = sequelize.define('OTPRequest', {
 
 // --- 21. ActivityLogs ---
 const ActivityLog = sequelize.define('ActivityLog', {
+  user_id: { type: DataTypes.INTEGER, allowNull: false },
   action_type: { type: DataTypes.STRING, allowNull: false },
+  description: { type: DataTypes.TEXT, allowNull: true },
   metadata_json: { type: DataTypes.JSONB }
 }, { timestamps: true, createdAt: 'timestamp', updatedAt: false });
 
@@ -331,8 +333,8 @@ Quiz.hasMany(LeaderboardEntry, { foreignKey: 'quiz_id' });
 LeaderboardEntry.belongsTo(Quiz, { foreignKey: 'quiz_id' });
 
 // Activity Logs
-User.hasMany(ActivityLog, { foreignKey: 'student_id', onDelete: 'CASCADE' });
-ActivityLog.belongsTo(User, { foreignKey: 'student_id' });
+User.hasMany(ActivityLog, { foreignKey: 'user_id', onDelete: 'CASCADE' });
+ActivityLog.belongsTo(User, { foreignKey: 'user_id' });
 
 // ================== NEW PHASE 1 RELATIONSHIPS ==================
 

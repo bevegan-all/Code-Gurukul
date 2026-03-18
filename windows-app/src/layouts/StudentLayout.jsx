@@ -44,6 +44,7 @@ const StudentLayout = () => {
     { name: 'Check Attendance', icon: <Calendar size={20} aria-hidden="true" />, path: '/app/attendance' },
     { name: 'Free Sandbox', icon: <Terminal size={20} aria-hidden="true" />, path: '/app/sandbox' },
     { name: 'Quizzes', icon: <ClipboardList size={20} aria-hidden="true" />, path: '/app/quizzes' },
+    { name: 'External Tools', icon: <Terminal size={20} aria-hidden="true" />, path: '/app/external-tools' },
     { name: 'Leaderboard', icon: <Trophy size={20} aria-hidden="true" />, path: '/app/leaderboard' },
   ];
 

@@ -167,7 +167,7 @@ const Header = () => {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-gray-800 leading-tight break-words">
-                          {isAdmin ? description : act.title}
+                          {isAdmin ? (description || adminAction) : act.title}
                         </p>
                         <p className="text-[10px] text-gray-500 mt-1 flex items-center justify-between font-medium">
                           <span className="truncate max-w-[120px]">{isAdmin ? userName : (act.subject || 'System')}</span>

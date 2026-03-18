@@ -322,6 +322,8 @@ router.get('/dashboard', async (req, res) => {
     const totalEarned = labEarned + quizEarned;
     const totalPossible = labTotal + quizTotal;
     const finalAccuracy = totalPossible > 0 ? Math.min(100.0, (totalEarned * 100.0 / totalPossible)) : 0;
+    const avgAssignment = labTotal > 0 ? Math.min(100.0, (labEarned * 100.0 / labTotal)) : 0;
+    const avgQuiz = quizTotal > 0 ? Math.min(100.0, (quizEarned * 100.0 / quizTotal)) : 0;
 
     const result = {
       name: req.user.name,
@@ -334,7 +336,9 @@ router.get('/dashboard', async (req, res) => {
         activeAssignments,
         publishedNotes: noteCount,
         activeQuizzes: quizCount,
-        overallAccuracy: parseFloat(finalAccuracy.toFixed(1))
+        overallAccuracy: parseFloat(finalAccuracy.toFixed(1)),
+        avgAssignment: parseFloat(avgAssignment.toFixed(1)),
+        avgQuiz: parseFloat(avgQuiz.toFixed(1))
       }
     };
     

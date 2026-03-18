@@ -1320,13 +1320,23 @@ router.get('/students/:id/full-details', async (req, res) => {
     // 2. Get All Assignment Scores
     const assignments = await sequelize.query(`
       SELECT a.id, a.title, a.compiler_required, a.subject_id,
-             COALESCE(SUM(sas.ai_marks), 0) as total_score,
-             COALESCE(SUM(q.max_marks), 0) as max_score,
-             MAX(sas.submitted_at) as last_submitted
+             COALESCE(SUM(sub.earned_marks), 0) as total_score,
+             COALESCE(SUM(sub.max_marks), 0) as max_score,
+             MAX(sub.last_submitted) as last_submitted
       FROM "LabAssignments" a
-      LEFT JOIN "AssignmentSets" s ON s.assignment_id = a.id
-      LEFT JOIN "AssignmentQuestions" q ON q.set_id = s.id
-      LEFT JOIN "StudentAssignmentSubmissions" sas ON sas.question_id = q.id AND sas.student_id = :userId
+      LEFT JOIN "AssignmentSets" asets ON asets.assignment_id = a.id
+      LEFT JOIN (
+        SELECT aq.set_id, aq.id as question_id, aq.max_marks,
+               COALESCE(sub_inner.earned_marks, 0) as earned_marks,
+               sub_inner.last_submitted
+        FROM "AssignmentQuestions" aq
+        LEFT JOIN (
+           SELECT question_id, ai_marks as earned_marks, submitted_at as last_submitted,
+                  ROW_NUMBER() OVER(PARTITION BY student_id, question_id ORDER BY submitted_at DESC) as rn
+           FROM "StudentAssignmentSubmissions"
+           WHERE student_id = :userId
+        ) sub_inner ON aq.id = sub_inner.question_id AND sub_inner.rn = 1
+      ) sub ON sub.set_id = asets.id
       WHERE a.class_id = (SELECT class_id FROM "StudentProfiles" WHERE user_id = :userId)
          OR EXISTS (
            SELECT 1 FROM "StudentSubjects" ss 
@@ -1339,10 +1349,15 @@ router.get('/students/:id/full-details', async (req, res) => {
     // 3. Get All Quiz Scores
     const quizzes = await sequelize.query(`
       SELECT q.id, q.title, q.total_marks as max_marks, q.subject_id,
-             COALESCE(sqs.total_marks, 0) as score,
-             sqs.submitted_at
+             COALESCE(sub.earned_marks, 0) as score,
+             sub.submitted_at
       FROM "Quizzes" q
-      LEFT JOIN "StudentQuizSubmissions" sqs ON sqs.quiz_id = q.id AND sqs.student_id = :userId
+      LEFT JOIN (
+        SELECT sqs.quiz_id, sqs.total_marks as earned_marks, sqs.submitted_at,
+               ROW_NUMBER() OVER(PARTITION BY student_id, quiz_id ORDER BY submitted_at DESC) as rn
+        FROM "StudentQuizSubmissions" sqs
+        WHERE sqs.student_id = :userId
+      ) sub ON sub.quiz_id = q.id AND sub.rn = 1
       WHERE q.class_id = (SELECT class_id FROM "StudentProfiles" WHERE user_id = :userId)
          OR EXISTS (
            SELECT 1 FROM "StudentSubjects" ss 
@@ -1425,24 +1440,31 @@ router.get('/students/:id/full-details', async (req, res) => {
     `, { replacements: { userId, subjectIds }, type: sequelize.QueryTypes.SELECT }) : [];
 
     // Calculate Overall Summary Stats
-    let totalMax = 0;
-    let totalEarned = 0;
-
+    let totalAssignmentMax = 0;
+    let totalAssignmentEarned = 0;
     assignments.forEach(a => {
-      totalMax += Number(a.max_score || 0);
-      totalEarned += Number(a.total_score || 0);
-    });
-    quizzes.forEach(q => {
-      totalMax += Number(q.max_marks || 0);
-      totalEarned += Number(q.score || 0);
+      totalAssignmentMax += Number(a.max_score || 0);
+      totalAssignmentEarned += Number(a.total_score || 0);
     });
 
-    const overallAccuracy = totalMax > 0 ? Math.min(100, (totalEarned / totalMax) * 100) : 0;
+    let totalQuizMax = 0;
+    let totalQuizEarned = 0;
+    quizzes.forEach(q => {
+      totalQuizMax += Number(q.max_marks || 0);
+      totalQuizEarned += Number(q.score || 0);
+    });
+
+    const totalMax = totalAssignmentMax + totalQuizMax;
+    const totalEarned = totalAssignmentEarned + totalQuizEarned;
+
+    const overallAccuracy = totalMax > 0 ? Math.min(100.0, (totalEarned * 100.0 / totalMax)) : 0;
+    const avgAssignment = totalAssignmentMax > 0 ? Math.min(100.0, (totalAssignmentEarned * 100.0 / totalAssignmentMax)) : 0;
+    const avgQuiz = totalQuizMax > 0 ? Math.min(100.0, (totalQuizEarned * 100.0 / totalQuizMax)) : 0;
 
     const stats = {
       overallAccuracy: overallAccuracy.toFixed(1),
-      avgAssignment: totalMax > 0 ? ((assignments.reduce((acc, curr) => acc + Number(curr.total_score), 0) / Math.max(1, assignments.reduce((acc, curr) => acc + Number(curr.max_score), 0))) * 100).toFixed(1) : "0.0",
-      avgQuiz: totalMax > 0 ? ((quizzes.reduce((acc, curr) => acc + Number(curr.score), 0) / Math.max(1, quizzes.reduce((acc, curr) => acc + Number(curr.max_marks), 0))) * 100).toFixed(1) : "0.0",
+      avgAssignment: avgAssignment.toFixed(1),
+      avgQuiz: avgQuiz.toFixed(1),
       totalSessions: totalAtt,
       presentSessions: presentAtt,
       attPercentage: totalAtt ? Math.round((presentAtt / totalAtt) * 100) : 0,
@@ -1471,23 +1493,32 @@ router.post('/send-student-report', async (req, res) => {
     const academicStats = await sequelize.query(`
       SELECT s.id as subject_id, s.name as subject_name,
              (
-               SELECT COALESCE(AVG(score_sub.score), 0)
-               FROM (
-                 SELECT la.id, COALESCE(SUM(sas.ai_marks), 0) as score
-                 FROM "LabAssignments" la
-                 JOIN "AssignmentSets" aset ON la.id = aset.assignment_id
-                 JOIN "AssignmentQuestions" aq ON aset.id = aq.set_id
-                 LEFT JOIN "StudentAssignmentSubmissions" sas ON aq.id = sas.question_id AND sas.student_id = :student_id
-                 WHERE la.subject_id = s.id
-                 GROUP BY la.id
-               ) score_sub
-             ) as assignment_avg,
+                SELECT LEAST(100.0, CASE WHEN SUM(sub.max_marks) > 0 THEN (SUM(sub.earned_marks)::float / SUM(sub.max_marks)) * 100 ELSE 0 END)
+                FROM (
+                  SELECT aq.id, MAX(aq.max_marks) as max_marks, COALESCE(MAX(sas.ai_marks), 0) as earned_marks
+                  FROM "LabAssignments" la
+                  JOIN "AssignmentSets" aset ON la.id = aset.assignment_id
+                  JOIN "AssignmentQuestions" aq ON aset.id = aq.set_id
+                  LEFT JOIN "StudentAssignmentSubmissions" sas ON aq.id = sas.question_id AND sas.student_id = :student_id
+                  WHERE la.subject_id = s.id
+                  GROUP BY aq.id
+                ) sub
+             ) as assignment_accuracy,
              (
-               SELECT COALESCE(AVG(sqs.total_marks), 0)
-               FROM "Quizzes" q
-               LEFT JOIN "StudentQuizSubmissions" sqs ON q.id = sqs.quiz_id AND sqs.student_id = :student_id
-               WHERE q.subject_id = s.id
-             ) as quiz_avg
+                SELECT LEAST(100.0, CASE WHEN SUM(sub.max_marks) > 0 THEN (SUM(sub.earned_marks)::float / SUM(sub.max_marks)) * 100 ELSE 0 END)
+                FROM (
+                  SELECT q.id, MAX(q.total_marks) as max_marks, COALESCE(MAX(sqs.total_marks), 0) as earned_marks
+                  FROM "Quizzes" q
+                  LEFT JOIN (
+                    SELECT quiz_id, total_marks,
+                           ROW_NUMBER() OVER(PARTITION BY student_id, quiz_id ORDER BY submitted_at DESC) as rn
+                    FROM "StudentQuizSubmissions"
+                    WHERE student_id = :student_id
+                  ) sqs ON q.id = sqs.quiz_id AND sqs.rn = 1
+                  WHERE q.subject_id = s.id
+                  GROUP BY q.id
+                ) sub
+             ) as quiz_accuracy
       FROM "Subjects" s
       JOIN "TeacherSubjects" ts ON ts.subject_id = s.id
       WHERE ts.teacher_id = :teacherId
